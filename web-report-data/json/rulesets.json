@@ -1,0 +1,47 @@
+[
+  {
+    "id": 1,
+    "name": "默认合规检查（全面）",
+    "description": "内置默认规则集：覆盖 SEO、性能、安全、内容可用性与合规维度，适用于网站上线前全面检查。",
+    "isBuiltin": true,
+    "parentId": null,
+    "createdAt": "2026-09-14T09:41:47.034Z",
+    "updatedAt": "2026-09-14T09:41:47.034Z"
+  },
+  {
+    "id": 2,
+    "name": "默认合规检查（全面）",
+    "description": "内置默认规则集：覆盖 SEO、性能、安全、内容可用性与合规维度，适用于网站上线前全面检查。",
+    "isBuiltin": true,
+    "parentId": null,
+    "createdAt": "2026-09-14T09:41:47.039Z",
+    "updatedAt": "2026-09-14T09:41:47.039Z"
+  },
+  {
+    "id": 3,
+    "name": "快速安全检查",
+    "description": "仅包含安全与基础可用性规则，检测耗时短，适合快速初筛。",
+    "isBuiltin": true,
+    "parentId": null,
+    "createdAt": "2026-09-14T09:41:47.046Z",
+    "updatedAt": "2026-09-14T09:41:47.046Z"
+  },
+  {
+    "id": 4,
+    "name": "快速安全检查",
+    "description": "仅包含安全与基础可用性规则，检测耗时短，适合快速初筛。",
+    "isBuiltin": true,
+    "parentId": null,
+    "createdAt": "2026-09-14T09:41:47.048Z",
+    "updatedAt": "2026-09-14T09:41:47.048Z"
+  },
+  {
+    "id": 5,
+    "name": "建站服务合同验收",
+    "description": "按建站服务合同 8 大板块（网站规划/网站建设/功能与优化/后台管理/图文内容/客户资产/售后支持/年度维保）逐项验收；可自动检测项由浏览器引擎验证，人工交付项标记为「待验收」。",
+    "isBuiltin": true,
+    "parentId": null,
+    "createdAt": "2026-09-15T01:15:17.881Z",
+    "updatedAt": "2026-09-15T01:15:17.881Z"
+  }
+]

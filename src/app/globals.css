@@ -1,26 +1,189 @@
 @import "tailwindcss";
 
+/* class 策略暗色模式（配合主题切换按钮） */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ── Core 原始色板（不随主题变化） ── */
+  --core-blue-50: #eef6ff;
+  --core-blue-100: #d9eaff;
+  --core-blue-200: #bcd9ff;
+  --core-blue-300: #8ec1ff;
+  --core-blue-400: #5a9dfc;
+  --core-blue-500: #2f7bf6;
+  --core-blue-600: #1c5fe0;
+  --core-blue-700: #184bb4;
+  --core-blue-800: #1a3f8f;
+  --core-blue-900: #1b3776;
+  --core-blue-950: #14244a;
+
+  --core-emerald-50: #ecfdf5;
+  --core-emerald-500: #10b981;
+  --core-emerald-600: #059669;
+  --core-emerald-700: #047857;
+
+  --core-amber-50: #fffbeb;
+  --core-amber-500: #f59e0b;
+  --core-amber-600: #d97706;
+  --core-amber-700: #b45309;
+
+  --core-red-50: #fef2f2;
+  --core-red-500: #ef4444;
+  --core-red-600: #dc2626;
+  --core-red-700: #b91c1c;
+
+  --core-zinc-50: #fafafa;
+  --core-zinc-100: #f4f4f5;
+  --core-zinc-200: #e4e4e7;
+  --core-zinc-300: #d4d4d8;
+  --core-zinc-400: #a1a1aa;
+  --core-zinc-500: #71717a;
+  --core-zinc-600: #52525b;
+  --core-zinc-700: #3f3f46;
+  --core-zinc-800: #27272a;
+  --core-zinc-900: #18181b;
+
+  /* ── Semantic 语义令牌（随主题变化） ── */
+  --background: #f8fafc;
+  --background-elevated: #ffffff;
+  --foreground: #18181b;
+  --foreground-muted: #52525b;
+  --foreground-subtle: #a1a1aa;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+
+  --primary: var(--core-blue-600);
+  --primary-hover: var(--core-blue-500);
+  --primary-foreground: #ffffff;
+  --primary-soft: var(--core-blue-50);
+  --primary-soft-foreground: var(--core-blue-800);
+
+  --success: var(--core-emerald-600);
+  --success-soft: var(--core-emerald-50);
+  --success-soft-foreground: var(--core-emerald-700);
+
+  --warning: var(--core-amber-600);
+  --warning-soft: var(--core-amber-50);
+  --warning-soft-foreground: var(--core-amber-700);
+
+  --danger: var(--core-red-600);
+  --danger-soft: var(--core-red-50);
+  --danger-soft-foreground: var(--core-red-700);
+
+  --shadow-sm-value: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06);
+  --shadow-md-value: 0 2px 4px -1px rgb(16 24 40 / 0.06), 0 4px 10px -2px rgb(16 24 40 / 0.08);
+  --shadow-lg-value: 0 8px 24px -6px rgb(16 24 40 / 0.12), 0 4px 8px -4px rgb(16 24 40 / 0.08);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+.dark {
+  --background: #0b0e14;
+  --background-elevated: #141824;
+  --foreground: #f4f4f5;
+  --foreground-muted: #a1a1aa;
+  --foreground-subtle: #71717a;
+  --border: #262b3a;
+  --border-strong: #343b4e;
+
+  --primary: var(--core-blue-400);
+  --primary-hover: var(--core-blue-300);
+  --primary-foreground: #0b1220;
+  --primary-soft: #16233f;
+  --primary-soft-foreground: var(--core-blue-200);
+
+  --success: var(--core-emerald-500);
+  --success-soft: #0c2a22;
+  --success-soft-foreground: #6ee7b7;
+
+  --warning: var(--core-amber-500);
+  --warning-soft: #2b2110;
+  --warning-soft-foreground: #fcd34d;
+
+  --danger: var(--core-red-500);
+  --danger-soft: #2d1418;
+  --danger-soft-foreground: #fca5a5;
+
+  --shadow-sm-value: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md-value: 0 2px 4px -1px rgb(0 0 0 / 0.4), 0 4px 10px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg-value: 0 8px 24px -6px rgb(0 0 0 / 0.5), 0 4px 8px -4px rgb(0 0 0 / 0.4);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
   --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-soft-foreground: var(--danger-soft-foreground);
+
+  --shadow-sm: var(--shadow-sm-value);
+  --shadow-md: var(--shadow-md-value);
+  --shadow-lg: var(--shadow-lg-value);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* 焦点可见环：满足 WCAG 2.4.7 键盘可达性 */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground-subtle);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 选中色 */
+::selection {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
