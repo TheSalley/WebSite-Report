@@ -30,6 +30,15 @@ export interface ReportData {
   pagespeedShots: { strategy: string; dataUrl: string | null }[]
 }
 
+/** ISO 时间 → 本地可读时间（YYYY-MM-DD HH:mm），空值/异常显示 — */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 /** HTML 转义，防 XSS */
 function escapeHtml(text: string): string {
   return text
@@ -424,8 +433,8 @@ export function buildReportHtml(data: ReportData): string {
       <td class="label">任务编号</td><td class="value">#${task.id}</td>
     </tr>
     <tr>
-      <td class="label">检测时间</td><td class="value">${escapeHtml(task.startedAt ?? '—')}</td>
-      <td class="label">完成时间</td><td class="value">${escapeHtml(task.finishedAt ?? '—')}</td>
+      <td class="label">检测时间</td><td class="value">${escapeHtml(formatDateTime(task.startedAt))}</td>
+      <td class="label">完成时间</td><td class="value">${escapeHtml(formatDateTime(task.finishedAt))}</td>
     </tr>
   </table>
 
