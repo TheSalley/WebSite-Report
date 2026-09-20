@@ -4,6 +4,7 @@ import * as React from 'react'
 import { Plus, Copy, Trash2, ChevronRight, Save, ListChecks } from 'lucide-react'
 import { Button, Card, Dialog, Input, Textarea, Label, Badge, Empty, Switch, Select } from '@/components/ui'
 import type { RuleSet, Rule, Severity } from '@/lib/types'
+import { fetchJson, friendlyError } from '@/lib/client-fetch'
 
 type RuleRow = Omit<Rule, 'id'> & { id?: number }
 
@@ -14,6 +15,7 @@ export default function RulesPage() {
   const [rules, setRules] = React.useState<RuleRow[]>([])
   const [dirty, setDirty] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState('')
   const [createOpen, setCreateOpen] = React.useState(false)
   const [newName, setNewName] = React.useState('')
   const [newDesc, setNewDesc] = React.useState('')
@@ -21,20 +23,35 @@ export default function RulesPage() {
   const [expandGroup, setExpandGroup] = React.useState<Record<string, boolean>>({})
 
   const loadSets = async () => {
-    const data = await fetch('/api/rulesets').then((r) => r.json())
-    setRuleSets(data)
-    if (!selectedId && data.length > 0) setSelectedId(data[0].id)
+    try {
+      const data = await fetchJson<RuleSet[]>('/api/rulesets')
+      setRuleSets(data)
+      if (!selectedId && data.length > 0) setSelectedId(data[0].id)
+      setError('')
+    } catch (e) {
+      setError(friendlyError(e))
+    } finally {
+      setLoading(false)
+    }
   }
 
   const loadRules = async (id: number) => {
-    const data = await fetch(`/api/rulesets/${id}/rules`).then((r) => r.json())
-    setRules(data)
-    setDirty(false)
+    try {
+      setRules(await fetchJson<RuleRow[]>(`/api/rulesets/${id}/rules`))
+      setDirty(false)
+      setError('')
+    } catch (e) {
+      setError(friendlyError(e))
+    }
   }
 
   const loadCatalog = async () => {
-    const data = await fetch('/api/rulesets/catalog').then((r) => r.json())
-    setCatalog(data)
+    try {
+      setCatalog(await fetchJson<RuleRow[]>('/api/rulesets/catalog'))
+      setError('')
+    } catch (e) {
+      setError(friendlyError(e))
+    }
   }
 
   React.useEffect(() => {
@@ -155,6 +172,8 @@ export default function RulesPage() {
           <Plus className="h-4 w-4" /> 新建规则集
         </Button>
       </div>
+
+      {error && <div className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>}
 
       {loading ? (
         <div className="flex justify-center py-16"><span className="text-sm text-foreground-subtle">加载中…</span></div>

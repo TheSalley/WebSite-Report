@@ -4,6 +4,7 @@ import * as React from 'react'
 import { Plus, Pencil, Trash2, Globe, Upload, ExternalLink } from 'lucide-react'
 import { Button, Card, Dialog, Input, Textarea, Label, Empty } from '@/components/ui'
 import type { Site } from '@/lib/types'
+import { fetchJson, friendlyError } from '@/lib/client-fetch'
 
 export default function SitesPage() {
   const [sites, setSites] = React.useState<Site[]>([])
@@ -18,11 +19,10 @@ export default function SitesPage() {
 
   const load = async () => {
     try {
-      const data = await fetch('/api/sites').then((r) => r.json())
-      setSites(data)
+      setSites(await fetchJson<Site[]>('/api/sites'))
       setError('')
     } catch (e) {
-      setError((e as Error).message)
+      setError(friendlyError(e))
     } finally {
       setLoading(false)
     }

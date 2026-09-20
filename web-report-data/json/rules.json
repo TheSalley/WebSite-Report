@@ -1260,28 +1260,6 @@
   },
   {
     "ruleSetId": 5,
-    "groupName": "客户资产",
-    "ruleKey": "verify.asset.domain",
-    "name": "网站域名指导（推荐/解析）",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 36,
-    "id": 120
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "客户资产",
-    "ruleKey": "verify.asset.icp",
-    "name": "网站备案指导",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 37,
-    "id": 121
-  },
-  {
-    "ruleSetId": 5,
     "groupName": "售后支持",
     "ruleKey": "verify.support.inspection",
     "name": "网站日常巡检",
@@ -1378,27 +1356,5 @@
     "params": {},
     "sortOrder": 47,
     "id": 130
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "年度维保",
-    "ruleKey": "verify.maintain.first_year",
-    "name": "首年免费运维保障",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 48,
-    "id": 131
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "年度维保",
-    "ruleKey": "verify.maintain.renew",
-    "name": "次年起续费维护（¥5000/年）",
-    "severity": "suggest",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 49,
-    "id": 132
   }
 ]

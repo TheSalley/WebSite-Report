@@ -12,9 +12,7 @@ const GROUP_BUILD = '网站建设'
 const GROUP_OPTIMIZE = '功能与优化'
 const GROUP_ADMIN = '后台管理'
 const GROUP_CONTENT_FILL = '图文内容'
-const GROUP_ASSET = '客户资产'
 const GROUP_SUPPORT = '售后支持'
-const GROUP_MAINTAIN = '年度维保'
 
 interface SeedRule {
   groupName: string
@@ -111,11 +109,6 @@ const contractRuleDefs: SeedRule[] = [
   { groupName: GROUP_CONTENT_FILL, ruleKey: 'verify.content.product', name: '产品代上传（1—5 个）', severity: 'suggest' },
   { groupName: GROUP_CONTENT_FILL, ruleKey: 'verify.content.blog', name: '博文代上传（1—4 篇）', severity: 'suggest' },
 
-  // ── 客户资产 ──
-  { groupName: GROUP_ASSET, ruleKey: 'verify.asset.domain', name: '网站域名指导（推荐/解析）', severity: 'warning' },
-  { groupName: GROUP_ASSET, ruleKey: 'verify.asset.icp', name: '网站备案指导', severity: 'warning' },
-  { groupName: GROUP_ASSET, ruleKey: 'compliance.icp', name: 'ICP 备案号展示', severity: 'warning' },
-
   // ── 售后支持 ──
   { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.inspection', name: '网站日常巡检', severity: 'warning' },
   { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.bugfix', name: '紧急 Bug 修复', severity: 'warning' },
@@ -126,10 +119,6 @@ const contractRuleDefs: SeedRule[] = [
   { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.content', name: '上线内容技术支持', severity: 'suggest' },
   { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.rollback', name: '免费数据回滚一次', severity: 'suggest' },
   { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.source', name: '免费提供源代码（1 次）', severity: 'suggest' },
-
-  // ── 年度维保 ──
-  { groupName: GROUP_MAINTAIN, ruleKey: 'verify.maintain.first_year', name: '首年免费运维保障', severity: 'warning' },
-  { groupName: GROUP_MAINTAIN, ruleKey: 'verify.maintain.renew', name: '次年起续费维护（¥5000/年）', severity: 'suggest' }
 ]
 
 /** 内置规则集定义 */
@@ -147,7 +136,7 @@ export const BUILTIN_RULE_SETS: BuiltinRuleSetDef[] = [
   },
   {
     name: '建站服务合同验收',
-    description: '按建站服务合同 8 大板块（网站规划/网站建设/功能与优化/后台管理/图文内容/客户资产/售后支持/年度维保）逐项验收；可自动检测项由浏览器引擎验证，人工交付项标记为「待验收」。',
+    description: '按建站服务合同 6 大板块（网站规划/网站建设/功能与优化/后台管理/图文内容/售后支持）逐项验收；可自动检测项由浏览器引擎验证，人工交付项标记为「待验收」。',
     rules: contractRuleDefs
   },
   {

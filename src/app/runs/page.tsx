@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock } from 'lucide-react'
 import { Button, Card, Dialog, Input, Select, Empty, Spinner, StatusBadge, Badge, ScoreRing } from '@/components/ui'
 import type { Task, Site, RuleSet, CheckResult } from '@/lib/types'
+import { fetchJson, friendlyError } from '@/lib/client-fetch'
 
 type TaskRow = Task & {
   progress: { done: number; total: number; ruleKey: string; ruleName: string; status: string; error?: string } | null
@@ -29,25 +30,34 @@ export default function RunsPage() {
   const loadAll = React.useCallback(async () => {
     try {
       const [t, s, rs] = await Promise.all([
-        fetch('/api/tasks').then((r) => r.json()),
-        fetch('/api/sites').then((r) => r.json()),
-        fetch('/api/rulesets').then((r) => r.json())
+        fetchJson<TaskRow[]>('/api/tasks'),
+        fetchJson<Site[]>('/api/sites'),
+        fetchJson<RuleSet[]>('/api/rulesets')
       ])
       setTasks(t)
       setSites(s)
       setRuleSets(rs)
       setError('')
     } catch (e) {
-      setError((e as Error).message)
+      setError(friendlyError(e))
+      // 请求失败时不动已加载数据，仅提示
     } finally {
       setLoading(false)
     }
   }, [])
 
   React.useEffect(() => {
-    loadAll()
-    const timer = setInterval(loadAll, 2000)
-    return () => clearInterval(timer)
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = async () => {
+      await loadAll()
+      if (!stopped) timer = setTimeout(tick, 3000)
+    }
+    void tick()
+    return () => {
+      stopped = true
+      if (timer) clearTimeout(timer)
+    }
   }, [loadAll])
 
   const openStart = () => {
@@ -415,14 +425,6 @@ export default function RunsPage() {
                           <dd className="min-w-0 break-all">{r.description}</dd>
                         </div>
                       </dl>
-                      {r.screenshotPath && (
-                        <img
-                          src={`/api/screenshots/${r.screenshotPath}`}
-                          alt={`${r.ruleName} 截图证据`}
-                          className="mt-3 w-full rounded-md border border-border"
-                          loading="lazy"
-                        />
-                      )}
                       {(r.note || selectedTask.status === 'success') && (
                         <div className="mt-3 flex gap-2">
                           <Input
