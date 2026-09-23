@@ -2,8 +2,8 @@
 
 import * as React from 'react'
 import { Plus, Copy, Trash2, ChevronRight, Save, ListChecks } from 'lucide-react'
-import { Button, Card, Dialog, Input, Textarea, Label, Badge, Empty, Switch, Select } from '@/components/ui'
-import type { RuleSet, Rule, Severity } from '@/lib/types'
+import { Button, Card, Dialog, Input, Textarea, Label, Empty, Switch } from '@/components/ui'
+import type { RuleSet, Rule } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
 
 type RuleRow = Omit<Rule, 'id'> & { id?: number }
@@ -159,8 +159,6 @@ export default function RulesPage() {
     return Array.from(map.entries())
   }, [rules])
 
-  const severityText: Record<Severity, string> = { critical: '必须', warning: '警告', suggest: '建议' }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -269,19 +267,13 @@ export default function RulesPage() {
                                   <div className="text-sm font-medium">{rule.name}</div>
                                   <div className="font-mono text-[11px] text-foreground-subtle">{rule.ruleKey}</div>
                                 </div>
-                                <Badge color={rule.severity === 'critical' ? 'red' : rule.severity === 'warning' ? 'amber' : 'gray'}>
-                                  {severityText[rule.severity]}
-                                </Badge>
-                                <Select
-                                  value={rule.severity}
-                                  onChange={(v) => patchRule(rule, { severity: v as Severity })}
-                                  options={[
-                                    { value: 'critical', label: '必须' },
-                                    { value: 'warning', label: '警告' },
-                                    { value: 'suggest', label: '建议' }
-                                  ]}
-                                  className="h-8"
-                                />
+                                <label className="flex items-center gap-1.5 text-xs text-foreground-muted" title="开启后检测直接按「通过」计，跳过实际检测">
+                                  <Switch
+                                    checked={rule.params?.defaultPass === true}
+                                    onCheckedChange={(v) => patchRule(rule, { params: { ...rule.params, defaultPass: v } })}
+                                  />
+                                  默认通过
+                                </label>
                                 <Button variant="ghost" size="sm" onClick={() => removeRule(rule)}>
                                   <Trash2 className="h-3.5 w-3.5 text-danger" />
                                 </Button>
@@ -346,9 +338,6 @@ export default function RulesPage() {
                     >
                       <span className="flex items-center gap-2">
                         <span>{item.name}</span>
-                        <Badge color={item.severity === 'critical' ? 'red' : item.severity === 'warning' ? 'amber' : 'gray'}>
-                          {severityText[item.severity]}
-                        </Badge>
                       </span>
                       <span className="text-xs text-foreground-subtle">{added ? '已添加' : '＋ 添加'}</span>
                     </button>

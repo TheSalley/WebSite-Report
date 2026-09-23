@@ -1,4 +1,4 @@
-import { ShieldCheck, Globe, ListChecks, FileText, CheckCircle2, Info } from 'lucide-react'
+import { ShieldCheck, Globe, ListChecks, FileText } from 'lucide-react'
 
 const steps = [
   { icon: Globe, title: '1. 添加站点', desc: '在「站点管理」新建或批量导入待检测网站。', accent: 'text-sky-500 bg-sky-500/10' },
@@ -56,26 +56,6 @@ export default function DocsPage() {
         </div>
       </section>
 
-      {/* 得分说明 */}
-      <section className="rounded-xl border border-border bg-background-elevated p-5 shadow-sm">
-        <h2 className="flex items-center gap-2 text-base font-semibold">
-          <Info className="h-4 w-4 text-primary" /> 得分与结论
-        </h2>
-        <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground-muted">
-          <li className="flex gap-2">
-            <CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-success" />
-            100 分制，权重：必须 = 3 / 警告 = 2 / 建议 = 1；通过全权重、警告半权重、失败/跳过记 0 分。
-          </li>
-          <li className="flex gap-2">
-            <CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-success" />
-            任一「必须」项失败 → 整体判定「不通过」；存在警告/失败 → 「有条件通过」；否则「通过」。
-          </li>
-          <li className="flex gap-2">
-            <CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-success" />
-            PageSpeed 评分随任务自动采集（移动端 + 桌面端），配置 PSI API Key 时优先使用，否则回退本地 Lighthouse。
-          </li>
-        </ul>
-      </section>
     </div>
   )
 }

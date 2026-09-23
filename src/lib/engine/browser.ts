@@ -10,7 +10,17 @@ export async function getBrowser(): Promise<Browser> {
   if (browser && browser.isConnected()) return browser
   browser = await chromium.launch({
     headless: true,
-    args: ['--no-sandbox']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--mute-audio',
+      '--no-default-browser-check'
+    ]
   })
   return browser
 }

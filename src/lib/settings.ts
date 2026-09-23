@@ -8,11 +8,7 @@ export async function getReportSettings(): Promise<ReportSettings> {
   for (const key of Object.keys(DEFAULT_REPORT_SETTINGS) as (keyof ReportSettings)[]) {
     const raw = rows[`report.${key}`]
     if (raw === undefined) continue
-    if (key === 'showConclusionPage') {
-      out[key] = raw === '1' || raw === 'true'
-    } else {
-      ;(out as Record<string, unknown>)[key] = raw
-    }
+    ;(out as Record<string, unknown>)[key] = raw
   }
   return { ...DEFAULT_REPORT_SETTINGS, ...out }
 }
@@ -25,7 +21,6 @@ export async function saveReportSettings(settings: Partial<ReportSettings>): Pro
   rows['report.companyName'] = merged.companyName
   rows['report.logoPath'] = merged.logoPath
   rows['report.reportTitle'] = merged.reportTitle
-  rows['report.showConclusionPage'] = merged.showConclusionPage ? '1' : '0'
   rows['report.footerText'] = merged.footerText
   rows['report.psiApiKey'] = merged.psiApiKey
   await saveSettings(rows)

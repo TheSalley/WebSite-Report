@@ -79,6 +79,8 @@ export interface Task {
   verifyCount?: number
   startedAt: string | null
   finishedAt: string | null
+  /** 失败原因（任务 failed 时由引擎写入） */
+  error?: string | null
   site?: Site
   ruleSet?: RuleSet
   /** PageSpeed 评分结果（任务执行时采集，可能为 null） */
@@ -113,7 +115,6 @@ export interface ReportSettings {
   companyName: string
   logoPath: string
   reportTitle: string
-  showConclusionPage: boolean
   footerText: string
   /** 可选：Google PageSpeed 接口 Key（留空用本地 Lighthouse） */
   psiApiKey: string
@@ -121,9 +122,8 @@ export interface ReportSettings {
 
 export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
   companyName: '',
-  logoPath: '',
+  logoPath: '/logo.svg',
   reportTitle: '网站合规性检测报告',
-  showConclusionPage: true,
   footerText: '本报告由网站合规性检测工具自动生成',
   psiApiKey: ''
 }
@@ -161,3 +161,4 @@ export interface PageSpeedReportData {
   /** 整体失败说明（如 URL 无效） */
   error?: string
 }
+

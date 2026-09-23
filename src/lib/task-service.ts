@@ -223,17 +223,17 @@ async function runInBackground(taskId: number, url: string, rules: RuleRow[], st
     )
     const score = result.score
     await updateTask(taskId, {
-      status: 'success',
       score: score.score,
       passCount: score.passCount,
       warnCount: score.warnCount,
       failCount: score.failCount,
       skipCount: score.skipCount,
-      verifyCount: score.verifyCount,
-      finishedAt: new Date().toISOString()
+      verifyCount: score.verifyCount
     })
 
     // 采集 PageSpeed 评分与页面截图（失败不阻塞任务状态，仅记录）
+    state.currentRuleKey = 'pagespeed'
+    state.currentRuleName = 'PageSpeed 评分与截图'
     try {
       const pagespeed = await fetchPageSpeed(url)
       await updateTask(taskId, { pagespeedJson: JSON.stringify(pagespeed) })
@@ -241,11 +241,18 @@ async function runInBackground(taskId: number, url: string, rules: RuleRow[], st
     } catch {
       // 忽略：网络/配额问题不影响主检测结果
     }
+
+    // 全部采集完成后再收尾：任务状态与完成时间（检测时间包含 PageSpeed 截图耗时）
+    await updateTask(taskId, {
+      status: 'success',
+      finishedAt: new Date().toISOString()
+    })
   } catch (e) {
     state.error = (e as Error).message
     await updateTask(taskId, {
       status: 'failed',
-      finishedAt: new Date().toISOString()
+      finishedAt: new Date().toISOString(),
+      error: (e as Error).message
     })
   } finally {
     runningTasks.delete(taskId)

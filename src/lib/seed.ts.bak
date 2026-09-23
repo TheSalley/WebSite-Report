@@ -1,7 +1,12 @@
 import type { Severity } from './types'
 
-/** 内置规则集种子数据：建站服务合同验收 */
+/** 内置默认规则集种子数据（与原桌面版 25 条规则一一对应） */
 
+const GROUP_SEO = 'SEO'
+const GROUP_PERF = '性能'
+const GROUP_SECURITY = '安全'
+const GROUP_CONTENT = '内容与可用性'
+const GROUP_COMPLIANCE = '合规（按需启用）'
 const GROUP_PLAN = '网站规划'
 const GROUP_BUILD = '网站建设'
 const GROUP_OPTIMIZE = '功能与优化'
@@ -17,6 +22,45 @@ interface SeedRule {
   params?: Record<string, unknown>
 }
 
+const seedRules: SeedRule[] = [
+  // ── SEO ──
+  { groupName: GROUP_SEO, ruleKey: 'seo.title.exists', name: 'title 标签存在且非空', severity: 'critical', params: {} },
+  { groupName: GROUP_SEO, ruleKey: 'seo.title.length', name: 'title 长度合理（≤ 60 字符）', severity: 'warning', params: { maxLength: 60 } },
+  { groupName: GROUP_SEO, ruleKey: 'seo.meta.description', name: 'meta description 存在', severity: 'warning', params: {} },
+  { groupName: GROUP_SEO, ruleKey: 'seo.og.basic', name: 'OG 基础标签完整', severity: 'warning', params: { require: ['og:title', 'og:image', 'og:description'] } },
+  { groupName: GROUP_SEO, ruleKey: 'seo.canonical', name: 'canonical 链接存在', severity: 'warning', params: {} },
+  { groupName: GROUP_SEO, ruleKey: 'seo.robots.txt', name: 'robots.txt 可访问', severity: 'warning', params: {} },
+  { groupName: GROUP_SEO, ruleKey: 'seo.sitemap.xml', name: 'sitemap.xml 可访问', severity: 'warning', params: {} },
+  { groupName: GROUP_SEO, ruleKey: 'seo.h1.exists', name: '存在唯一 h1 标题', severity: 'warning', params: {} },
+
+  // ── 性能 ──
+  { groupName: GROUP_PERF, ruleKey: 'perf.ttfb', name: '首字节时间 TTFB', severity: 'warning', params: { passMs: 800, warnMs: 1500 } },
+  { groupName: GROUP_PERF, ruleKey: 'perf.domcontentloaded', name: 'DOM 加载完成时间', severity: 'warning', params: { passMs: 2000, warnMs: 4000 } },
+  { groupName: GROUP_PERF, ruleKey: 'perf.load', name: '完整加载时间', severity: 'warning', params: { passMs: 3000, warnMs: 6000 } },
+  { groupName: GROUP_PERF, ruleKey: 'perf.total.size', name: '页面总传输大小', severity: 'warning', params: { passMb: 3, warnMb: 6 } },
+  { groupName: GROUP_PERF, ruleKey: 'perf.lcp', name: 'LCP 最大内容绘制', severity: 'warning', params: { passMs: 2500, warnMs: 4000 } },
+
+  // ── 安全 ──
+  { groupName: GROUP_SECURITY, ruleKey: 'security.https', name: 'HTTPS 可用且证书有效', severity: 'critical', params: {} },
+  { groupName: GROUP_SECURITY, ruleKey: 'security.cert.days', name: '证书剩余有效期', severity: 'warning', params: { passDays: 30, warnDays: 7 } },
+  { groupName: GROUP_SECURITY, ruleKey: 'security.hsts', name: 'HSTS 响应头存在', severity: 'suggest', params: {} },
+  { groupName: GROUP_SECURITY, ruleKey: 'security.security.headers', name: '基础安全响应头', severity: 'warning', params: { require: ['X-Frame-Options', 'X-Content-Type-Options', 'Referrer-Policy'] } },
+  { groupName: GROUP_SECURITY, ruleKey: 'security.sensitive.info', name: '无敏感信息泄露', severity: 'critical', params: {} },
+  { groupName: GROUP_SECURITY, ruleKey: 'security.mixed.content', name: '无混合内容（https 页无 http 资源）', severity: 'critical', params: {} },
+
+  // ── 内容与可用性 ──
+  { groupName: GROUP_CONTENT, ruleKey: 'content.charset', name: '页面编码为 UTF-8', severity: 'critical', params: {} },
+  { groupName: GROUP_CONTENT, ruleKey: 'content.favicon', name: 'favicon 存在', severity: 'suggest', params: {} },
+  { groupName: GROUP_CONTENT, ruleKey: 'content.viewport', name: '移动端 viewport 设置正确', severity: 'critical', params: {} },
+  { groupName: GROUP_CONTENT, ruleKey: 'content.console.errors', name: '页面加载无未捕获 JS 错误', severity: 'warning', params: {} },
+  { groupName: GROUP_CONTENT, ruleKey: 'content.404.friendly', name: '404 页面友好', severity: 'warning', params: {} },
+
+  // ── 合规（按需启用）──
+  { groupName: GROUP_COMPLIANCE, ruleKey: 'compliance.icp', name: 'ICP 备案号展示（中国大陆）', severity: 'warning', params: {} },
+  { groupName: GROUP_COMPLIANCE, ruleKey: 'compliance.privacy', name: '隐私政策入口存在', severity: 'warning', params: {} },
+  { groupName: GROUP_COMPLIANCE, ruleKey: 'compliance.copyright.year', name: '版权年份为当前年', severity: 'suggest', params: {} }
+]
+
 /** 建站服务合同验收规则：映射合同 8 大板块；verify.* 为人工交付项（待验收），其余由引擎自动检测 */
 const contractRuleDefs: SeedRule[] = [
   // ── 网站规划 ──
@@ -30,6 +74,7 @@ const contractRuleDefs: SeedRule[] = [
   { groupName: GROUP_BUILD, ruleKey: 'content.viewport', name: '响应式设计（移动端 viewport 正确）', severity: 'critical' },
   { groupName: GROUP_BUILD, ruleKey: 'contract.contact', name: '多转化入口（全局/页内询盘表单）', severity: 'warning', params: { defaultPass: true } },
   { groupName: GROUP_BUILD, ruleKey: 'contract.search', name: '全站搜索功能内置可用', severity: 'warning' },
+  { groupName: GROUP_BUILD, ruleKey: 'content.404.friendly', name: '自定义 404 页面友好', severity: 'warning' },
   { groupName: GROUP_BUILD, ruleKey: 'compliance.privacy', name: '隐私政策页（海外推广合规）', severity: 'warning' },
   { groupName: GROUP_BUILD, ruleKey: 'contract.gtranslate', name: 'Google 翻译插件（一键多语言）', severity: 'suggest' },
   { groupName: GROUP_BUILD, ruleKey: 'verify.build.thanks', name: '感谢页跳转跟踪已埋点', severity: 'suggest' },
@@ -37,8 +82,12 @@ const contractRuleDefs: SeedRule[] = [
   // ── 功能与优化 ──
   { groupName: GROUP_OPTIMIZE, ruleKey: 'contract.ga', name: 'GA 预埋（流量统计可追踪）', severity: 'warning' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'security.https', name: 'HTTPS 安全证书部署', severity: 'critical', params: { defaultPass: true } },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'security.cert.days', name: 'SSL 证书剩余有效期充足', severity: 'warning' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'security.security.headers', name: '基础安全响应头配置', severity: 'warning' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.title.exists', name: 'SEO：title 标签存在且非空', severity: 'critical' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.title.length', name: 'SEO：title 长度合理（≤60 字符）', severity: 'warning' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.meta.description', name: 'SEO：meta description 存在', severity: 'warning' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.canonical', name: 'SEO：canonical 链接存在', severity: 'warning' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.robots.txt', name: 'SEO：robots.txt 可访问', severity: 'warning' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.sitemap.xml', name: 'SEO：sitemap.xml 可访问', severity: 'warning' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.h1.exists', name: 'SEO：唯一 h1 标题', severity: 'warning' },
@@ -81,9 +130,19 @@ export interface BuiltinRuleSetDef {
 
 export const BUILTIN_RULE_SETS: BuiltinRuleSetDef[] = [
   {
+    name: '默认合规检查（全面）',
+    description: '内置默认规则集：覆盖 SEO、性能、安全、内容可用性与合规维度，适用于网站上线前全面检查。',
+    rules: seedRules
+  },
+  {
     name: '建站服务合同验收',
-    description: "按建站服务合同 6 大板块（网站规划/网站建设/功能与优化/后台管理/图文内容/售后支持）逐项验收；可自动检测项由浏览器引擎验证，人工交付项标记为「待验收」。",
+    description: '按建站服务合同 6 大板块（网站规划/网站建设/功能与优化/后台管理/图文内容/售后支持）逐项验收；可自动检测项由浏览器引擎验证，人工交付项标记为「待验收」。',
     rules: contractRuleDefs
+  },
+  {
+    name: '快速安全检查',
+    description: '仅包含安全与基础可用性规则，检测耗时短，适合快速初筛。',
+    rules: seedRules.filter((r) => [GROUP_SECURITY, GROUP_CONTENT].includes(r.groupName))
   }
 ]
 

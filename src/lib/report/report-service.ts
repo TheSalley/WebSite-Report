@@ -6,9 +6,6 @@ import { getBrowser } from '../engine/browser'
 
 import type { CheckResult, ReportSettings, Site, RuleSet, Task } from '../types'
 
-/** 报告结论 */
-export type ReportConclusion = 'pass' | 'warn' | 'fail'
-
 /** 报告数据（含截图 dataURL） */
 export interface ReportData {
   task: Task
@@ -22,7 +19,6 @@ export interface ReportData {
   failCount: number
   skipCount: number
   verifyCount: number
-  conclusion: ReportConclusion
   settings: ReportSettings
   /** PageSpeed 评分（任务可能没有，为 null） */
   pagespeed: import('../types').PageSpeedReportData | null
@@ -39,6 +35,30 @@ export function formatDateTime(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+const LOGO_MIME: Record<string, string> = {
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+}
+
+/** 将报告 LOGO 配置解析为内嵌 data URL（支持 data:、public 路径、绝对路径） */
+async function resolveLogoDataUrl(logoPath: string): Promise<string | null> {
+  if (!logoPath) return null
+  if (logoPath.startsWith('data:')) return logoPath
+  try {
+    const full = logoPath.startsWith('/') ? join(process.cwd(), 'public', logoPath) : logoPath
+    const buffer = await readFile(full)
+    const ext = (logoPath.toLowerCase().match(/(\.[a-z0-9]+)(?:\?|$)/) ?? [])[1] ?? '.png'
+    const mime = LOGO_MIME[ext] ?? 'image/png'
+    return `data:${mime};base64,${buffer.toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
 /** HTML 转义，防 XSS */
 function escapeHtml(text: string): string {
   return text
@@ -47,18 +67,6 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
-}
-
-const SEVERITY_TEXT: Record<string, string> = {
-  critical: '必须',
-  warning: '警告',
-  suggest: '建议'
-}
-
-const CONCLUSION_TEXT: Record<ReportConclusion, string> = {
-  pass: '通过',
-  warn: '有条件通过',
-  fail: '不通过'
 }
 
 /** 读取截图文件并转为 data URL */
@@ -135,9 +143,6 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
   const skipCount = results.filter((r) => r.status === 'skip').length
   const verifyCount = results.filter((r) => r.status === 'verify').length
 
-  const criticalFailed = results.some((r) => r.status === 'fail' && r.severity === 'critical')
-  const conclusion: ReportConclusion = criticalFailed ? 'fail' : warnCount > 0 || failCount > 0 ? 'warn' : 'pass'
-
   return {
     task,
     site,
@@ -150,7 +155,6 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     failCount,
     skipCount,
     verifyCount,
-    conclusion,
     settings: await getReportSettings(),
     pagespeed: task.pagespeed ?? null,
     pagespeedShots: await readPagespeedShots(taskId)
@@ -161,7 +165,7 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
 function statusBadgeHtml(status: string): string {
   const map: Record<string, { text: string; cls: string }> = {
     pass: { text: '通过', cls: 'pass' },
-    warn: { text: '警告', cls: 'warn' },
+    warn: { text: '通过', cls: 'pass' },
     fail: { text: '失败', cls: 'fail' },
     skip: { text: '跳过', cls: 'skip' },
     verify: { text: '待验收', cls: 'verify' }
@@ -179,7 +183,7 @@ export async function buildReportPdf(taskId: number): Promise<Buffer> {
 <meta charset="UTF-8" />
 <title>${escapeHtml(data.settings.reportTitle || '网站合规性检测报告')}</title>
 </head>
-<body>${buildReportHtml(data)}</body>
+<body>${await buildReportHtml(data)}</body>
 </html>`
   const browser = await getBrowser()
   const page = await browser.newPage()
@@ -201,14 +205,13 @@ export async function buildReportPdf(taskId: number): Promise<Buffer> {
 }
 
 /** 生成报告 HTML —— 合同式表格版式（可打印为 PDF） */
-export function buildReportHtml(data: ReportData): string {
-  const { site, ruleSet, results, score, passCount, warnCount, failCount, skipCount, verifyCount, conclusion, generatedAt, settings, pagespeedShots } = data
+export async function buildReportHtml(data: ReportData): Promise<string> {
+  const { site, ruleSet, results, generatedAt, settings, pagespeedShots } = data
   const task = data.task
   const CN = ['一','二','三','四','五','六','七','八','九','十']
   let sectionNo = 3
   const sectionTitle = (title: string) => { const no = sectionNo++; return `<h2 class="section-title">${CN[no - 1] ?? no}、${title}</h2>` }
-  const conclusionColor = conclusion === 'pass' ? '#15803d' : conclusion === 'warn' ? '#b45309' : '#b91c1c'
-  const scoreColor = score >= 90 ? '#15803d' : score >= 70 ? '#b45309' : '#b91c1c'
+  const logoDataUrl = settings.logoPath ? await resolveLogoDataUrl(settings.logoPath) : null
 
   // 按分组聚合（保持检测顺序）
   const groups = new Map<string, (typeof data.results)[number][]>()
@@ -298,23 +301,6 @@ export function buildReportHtml(data: ReportData): string {
         .join('')}
     </div>`
 
-  // ── 板块验收汇总（结论页）──
-  const summaryRows = Array.from(groups.entries())
-    .map(([groupName, groupResults]) => {
-      const cnt = (s: string) => groupResults.filter((r) => r.status === s).length
-      return `<tr>
-        <td>${escapeHtml(groupName)}</td>
-        <td>${groupResults.length}</td>
-        <td>${cnt('pass')}</td>
-        <td>${cnt('warn')}</td>
-        <td>${cnt('fail')}</td>
-        <td>${cnt('verify')}</td>
-      </tr>`
-    })
-    .join('')
-
-  const hasCriticalFailed = results.some((r) => r.status === 'fail' && r.severity === 'critical')
-
   return `<style>
   .report-root, .report-root * { box-sizing: border-box; margin: 0; padding: 0; }
   .report-root { font-family: "Microsoft YaHei", "PingFang SC", "SimSun", sans-serif; color: #1f2430; background: #f6f8fb; padding: 32px 40px; line-height: 1.65; }
@@ -323,7 +309,7 @@ export function buildReportHtml(data: ReportData): string {
     @page { size: A4; }
     .report-root .contract-table { break-inside: auto; }
     .report-root .contract-table tr, .report-root .contract-table td { break-inside: auto; }
-    .report-root .header, .report-root .stat, .report-root .shot-item, .report-root .conclusion { break-inside: avoid; }
+    .report-root .header, .report-root .stat, .report-root .shot-item { break-inside: avoid; }
     .report-root thead { display: table-header-group; }
     .report-root { background: #fff; }
     .stat-grid { grid-template-columns: repeat(6, 1fr); }
@@ -334,11 +320,11 @@ export function buildReportHtml(data: ReportData): string {
   }
   .report-root h1, .report-root h2, .report-root h3 { margin: 0; font-weight: 700; }
 
-  /* 报告抬头（合同式居中标题） */
-  .header { text-align: center; background: #fff; border-radius: 14px; border-top: 4px solid #2563eb; padding: 30px 28px 22px; box-shadow: 0 2px 12px rgba(37,99,235,.06); margin-bottom: 26px; }
-  .header h1 { font-size: 26px; letter-spacing: 3px; color: #1e293b; }
-  .header .company { margin-top: 8px; font-size: 14px; color: #2563eb; font-weight: 600; }
-  .header .doc-no { margin-top: 8px; font-size: 12px; color: #64748b; }
+  /* 报告抬头（合同式居中标题，深蓝渐变底衬托 LOGO） */
+  .header { text-align: center; background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 55%, #14244a 100%); border-radius: 14px; padding: 26px 28px 24px; box-shadow: 0 8px 24px rgba(30,64,175,.18); margin-bottom: 26px; }
+  .header h1 { font-size: 24px; letter-spacing: 3px; color: #ffffff; }
+  .header .company { margin-top: 6px; font-size: 13px; color: #93c5fd; font-weight: 600; }
+  .header .doc-no { margin-top: 8px; font-size: 12px; color: #cbd5e1; }
 
   h2.section-title { font-size: 15px; font-weight: 700; color: #1e293b; border-left: 4px solid #2563eb; padding-left: 10px; margin: 26px 0 12px; letter-spacing: .5px; }
 
@@ -395,28 +381,12 @@ export function buildReportHtml(data: ReportData): string {
   .shot-item img { width: 100%; display: block; border-radius: 6px; border: 1px solid #eef2f7; }
   .shot-item figcaption { font-size: 12px; color: #475569; padding: 6px 2px 0; text-align: center; font-weight: 600; }
 
-  /* 结论 */
-  .conclusion { border: 1px solid #dbe3ef; border-left: 5px solid ${conclusionColor}; border-radius: 12px; background: #fff; padding: 20px 24px; margin-top: 8px; box-shadow: 0 2px 10px rgba(15,23,42,.05); }
-  .conclusion .conclusion-title { font-size: 18px; font-weight: 700; color: ${conclusionColor}; margin-bottom: 8px; }
-  .conclusion p { margin: 4px 0; }
-  .conclusion .sign { margin-top: 24px; display: flex; justify-content: space-between; font-size: 13px; }
-
   .footer { margin-top: 32px; text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px solid #e5eaf3; padding-top: 14px; }
-
-  /* 结论页：板块验收汇总表 + 签名区 */
-  .summary-table { margin-top: 18px; }
-  .summary-table td { text-align: center; }
-  .summary-table td:first-child { text-align: left; }
-  .summary-table tr.summary-total td { font-weight: 700; background: #f8fafc; }
-  .sign-row { display: flex; gap: 40px; margin-top: 30px; }
-  .sign-block { flex: 1; }
-  .sign-label { font-size: 12px; color: #64748b; margin-bottom: 6px; }
-  .sign-line { border-bottom: 1px solid #94a3b8; height: 30px; font-size: 13px; }
 </style>
 <div class="report-root">
 
   <div class="header">
-    ${settings.logoPath ? `<img src="${settings.logoPath}" alt="logo" style="height:48px;margin-bottom:8px;" />` : ''}
+    ${logoDataUrl ? `<img src="${logoDataUrl}" alt="logo" style="height:44px;margin-bottom:10px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));" />` : ''}
     <h1>${escapeHtml(settings.reportTitle || '网站合规性检测报告')}</h1>
     ${settings.companyName ? `<div class="company">${escapeHtml(settings.companyName)}</div>` : ''}
     <div class="doc-no">报告编号：WEB-REPORT-${String(task.id).padStart(4, '0')}　　生成日期：${escapeHtml(generatedAt)}</div>
@@ -451,48 +421,9 @@ export function buildReportHtml(data: ReportData): string {
     <tbody>${mainRows}</tbody>
   </table>
 
+  ${pagespeedSection ? `${sectionTitle('PageSpeed 评分')}${pagespeedSection}` : ''}
+
   ${screenshotSection ? `${sectionTitle('PageSpeed 评分截图')}${screenshotSection}` : ''}
-
-  ${settings.showConclusionPage ? `
-  ${sectionTitle('检测结论')}
-  <div class="conclusion">
-    <div class="conclusion-title">${CONCLUSION_TEXT[conclusion]}</div>
-    <p>本次对「<strong>${escapeHtml(site.name)}</strong>」（${escapeHtml(site.url)}）执行 ${escapeHtml(ruleSet.name)} 规则集检测，最终得分为 <strong style="color:${scoreColor}">${score}</strong> 分。</p>
-    <p>共检测 ${results.length} 项：通过 ${passCount} 项，警告 ${warnCount} 项，失败 ${failCount} 项，跳过 ${skipCount} 项。</p>
-    ${hasCriticalFailed ? '<p><strong>存在必须项（critical）失败，按规则判定为「不通过」。</strong></p>' : ''}
-    <p>${escapeHtml(settings.footerText)}</p>
-  </div>
-
-  <table class="contract-table summary-table">
-    <thead>
-      <tr>
-        <th style="width:30%">验收板块</th>
-        <th>项数</th>
-        <th>通过</th>
-        <th>警告</th>
-        <th>失败</th>
-        <th>待验收</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${summaryRows}
-      <tr class="summary-total">
-        <td>合计</td>
-        <td>${results.length}</td>
-        <td>${passCount}</td>
-        <td>${warnCount}</td>
-        <td>${failCount}</td>
-        <td>${verifyCount}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="sign-row">
-    <div class="sign-block"><div class="sign-label">检测人（签字）</div><div class="sign-line"></div></div>
-    <div class="sign-block"><div class="sign-label">审核人（签字）</div><div class="sign-line"></div></div>
-    <div class="sign-block"><div class="sign-label">日期</div><div class="sign-line">${escapeHtml(generatedAt)}</div></div>
-  </div>
-  <div style="margin-top:16px;font-size:13px;">检测机构（盖章）：${settings.companyName ? escapeHtml(settings.companyName) : '______________________'}</div>` : ''}
 
   <div class="footer">${escapeHtml(settings.footerText)}</div>
 

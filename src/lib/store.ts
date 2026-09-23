@@ -98,6 +98,7 @@ export interface TaskRow {
   startedAt: string | null
   finishedAt: string | null
   pagespeedJson: string | null
+  error: string | null
 }
 
 export interface CheckResultRow {
@@ -365,7 +366,8 @@ export async function createTask(input: { siteId: number; ruleSetId: number }): 
       verifyCount: 0,
       startedAt: null,
       finishedAt: null,
-      pagespeedJson: null
+      pagespeedJson: null,
+      error: null
     }
     rows.push(row)
     await writeJson(tasksFile(), rows)

@@ -8,7 +8,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   let error = ''
   try {
     const data = await buildReportData(Number(id))
-    html = buildReportHtml(data)
+    html = await buildReportHtml(data)
   } catch (e) {
     error = (e as Error).message
   }

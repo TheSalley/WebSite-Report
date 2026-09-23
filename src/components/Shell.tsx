@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ShieldCheck, Globe, ListChecks, FileText, Settings, Activity } from 'lucide-react'
+import { Globe, ListChecks, FileText, Settings, Activity } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 
 const navItems = [
@@ -25,15 +25,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-background text-foreground">
       {/* 桌面侧边栏 */}
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border bg-background-elevated md:flex">
-        {/* 品牌区 */}
-        <div className="flex h-14 items-center gap-2.5 border-b border-border px-5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary shadow-sm">
-            <ShieldCheck className="h-4.5 w-4.5 text-primary-foreground" />
-          </span>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold">网站合规性检测</div>
-            <div className="text-[10px] text-foreground-subtle">Web Compliance Checker</div>
-          </div>
+        {/* 品牌区（深蓝渐变底衬托白色 LOGO） */}
+        <div className="flex h-16 items-center border-b border-border bg-gradient-to-r from-blue-800 to-blue-950 px-5">
+          <img src="/logo.svg" alt="KUKA" className="h-9 w-auto object-contain" />
         </div>
 
         <nav className="flex-1 space-y-0.5 p-3">
@@ -64,13 +58,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* 移动端顶栏 */}
-      <div className="fixed inset-x-0 top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background-elevated px-4 md:hidden">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
-            <ShieldCheck className="h-4 w-4 text-primary-foreground" />
-          </span>
-          <span className="text-sm font-semibold">网站合规性检测</span>
-        </div>
+      <div className="fixed inset-x-0 top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-gradient-to-r from-blue-800 to-blue-950 px-4 md:hidden">
+        <img src="/logo.svg" alt="KUKA" className="h-7 w-auto object-contain" />
         <ThemeToggle />
       </div>
 

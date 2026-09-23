@@ -2,8 +2,8 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock } from 'lucide-react'
-import { Button, Card, Dialog, Input, Select, Empty, Spinner, StatusBadge, Badge, ScoreRing } from '@/components/ui'
+import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock, ImageUp, Smartphone, Monitor } from 'lucide-react'
+import { Button, Card, Dialog, Input, Select, Empty, Spinner, StatusBadge } from '@/components/ui'
 import type { Task, Site, RuleSet, CheckResult } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
 
@@ -26,6 +26,9 @@ export default function RunsPage() {
   const [resultsLoading, setResultsLoading] = React.useState(false)
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [noteDrafts, setNoteDrafts] = React.useState<Record<number, string>>({})
+  const [shotUploading, setShotUploading] = React.useState<'' | 'mobile' | 'desktop'>('')
+  const shotFileRef = React.useRef<HTMLInputElement | null>(null)
+  const shotStrategyRef = React.useRef<'mobile' | 'desktop'>('mobile')
 
   const loadAll = React.useCallback(async () => {
     try {
@@ -130,6 +133,36 @@ export default function RunsPage() {
     loadAll()
   }
 
+  const openShotPicker = (strategy: 'mobile' | 'desktop') => {
+    shotStrategyRef.current = strategy
+    shotFileRef.current?.click()
+  }
+
+  const replaceShot = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !selectedTask) return
+    const strategy = shotStrategyRef.current
+    setShotUploading(strategy)
+    try {
+      const body = new FormData()
+      body.append('strategy', strategy)
+      body.append('file', file)
+      const res = await fetch(`/api/tasks/${selectedTask.id}/pagespeed-shot`, { method: 'POST', body })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? '上传失败')
+      // 刷新任务数据（截图地址是文件路径，直接加时间戳刷新缓存即可）
+      await loadAll()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setShotUploading('')
+    }
+  }
+
+  const psShotUrl = (strategy: 'mobile' | 'desktop') =>
+    selectedTask ? `/api/screenshots/task-${selectedTask.id}/pagespeed-${strategy}.png` : ''
+
   const reportUrl = selectedTask ? `/reports/${selectedTask.id}` : ''
   const filteredResults = results.filter((r) => statusFilter === 'all' || r.status === statusFilter)
 
@@ -191,8 +224,7 @@ export default function RunsPage() {
                   <th className="px-4 py-3 font-medium">站点</th>
                   <th className="px-4 py-3 font-medium">规则集</th>
                   <th className="px-4 py-3 font-medium">状态</th>
-                  <th className="px-4 py-3 font-medium">得分</th>
-                  <th className="px-4 py-3 font-medium">通过/警告/失败</th>
+                  <th className="px-4 py-3 font-medium">通过/失败</th>
                   <th className="px-4 py-3 font-medium">时间</th>
                   <th className="px-4 py-3 text-right font-medium">操作</th>
                 </tr>
@@ -228,19 +260,8 @@ export default function RunsPage() {
                         <StatusBadge status={t.status} />
                       )}
                     </td>
-                    <td className="px-4 py-3.5">
-                      {t.score !== null ? (
-                        <span className={`font-mono text-base font-bold ${t.score >= 90 ? 'text-success' : t.score >= 70 ? 'text-warning' : 'text-danger'}`}>
-                          {t.score}
-                        </span>
-                      ) : (
-                        <span className="text-foreground-subtle">—</span>
-                      )}
-                    </td>
                     <td className="px-4 py-3.5 text-xs">
                       <span className="font-medium text-success">{t.passCount}</span>
-                      <span className="mx-1 text-foreground-subtle">/</span>
-                      <span className="font-medium text-warning">{t.warnCount}</span>
                       <span className="mx-1 text-foreground-subtle">/</span>
                       <span className="font-medium text-danger">{t.failCount}</span>
                     </td>
@@ -305,6 +326,13 @@ export default function RunsPage() {
       </Dialog>
 
       {/* 任务详情 */}
+      <input
+        ref={shotFileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={replaceShot}
+      />
       {selectedTask && (
         <Card className="mt-6 overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-zinc-50/50 px-5 py-4 dark:bg-zinc-800/20">
@@ -335,15 +363,10 @@ export default function RunsPage() {
             {/* 概览条 */}
             {!resultsLoading && results.length > 0 && (
               <div className="mb-5 flex flex-wrap items-center gap-6 rounded-xl border border-border bg-background p-4">
-                <ScoreRing score={selectedTask.score ?? 0} />
                 <div className="grid flex-1 grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
                   <div>
                     <div className="text-xs text-foreground-subtle">通过</div>
                     <div className="text-lg font-bold text-success">{statusCounts('pass')}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-foreground-subtle">警告</div>
-                    <div className="text-lg font-bold text-warning">{statusCounts('warn')}</div>
                   </div>
                   <div>
                     <div className="text-xs text-foreground-subtle">失败</div>
@@ -364,11 +387,22 @@ export default function RunsPage() {
             {resultsLoading ? (
               <div className="flex justify-center py-8"><Spinner /></div>
             ) : results.length === 0 ? (
-              <div className="py-8 text-center text-sm text-foreground-subtle">该任务暂无检测结果（可能页面加载失败或未完成）</div>
+              <div className="py-8 text-center text-sm">
+                {selectedTask.status === 'failed' ? (
+                  <div className="mx-auto max-w-lg">
+                    <div className="mb-1.5 font-medium text-danger">检测失败</div>
+                    <div className="break-all rounded-md bg-danger-soft px-4 py-2.5 text-left text-xs text-danger-soft-foreground">
+                      {selectedTask.error || '未知错误（可能是浏览器环境问题，请检查服务器 Chromium 是否已安装）'}
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-foreground-subtle">该任务暂无检测结果（可能页面加载失败或未完成）</span>
+                )}
+              </div>
             ) : (
               <>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
-                  {(['all', 'pass', 'warn', 'fail', 'skip', 'verify'] as const).map((s) => (
+                  {(['all', 'pass', 'fail', 'skip', 'verify'] as const).map((s) => (
                     <button
                       key={s}
                       onClick={() => setStatusFilter(s)}
@@ -378,9 +412,48 @@ export default function RunsPage() {
                           : 'bg-zinc-100 text-foreground-muted hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700'
                       }`}
                     >
-                      {s === 'all' ? '全部' : { pass: '通过', warn: '警告', fail: '失败', skip: '跳过', verify: '待验收' }[s]}
+                      {s === 'all' ? '全部' : { pass: '通过', fail: '失败', skip: '跳过', verify: '待验收' }[s]}
                       <span className="ml-1 opacity-70">{statusCounts(s)}</span>
                     </button>
+                  ))}
+                </div>
+
+                {/* PageSpeed 截图（支持替换） */}
+                <div className="mb-4 grid gap-3 lg:grid-cols-2">
+                  {(['mobile', 'desktop'] as const).map((strategy) => (
+                    <div
+                      key={strategy}
+                      className="overflow-hidden rounded-lg border border-border bg-background transition-shadow hover:shadow-sm"
+                    >
+                      <div className="flex items-center gap-3 border-b border-border bg-zinc-50/60 px-4 py-2.5 dark:bg-zinc-800/30">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-soft text-primary">
+                          {strategy === 'mobile' ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+                        </span>
+                        <span className="text-sm font-medium">PageSpeed {strategy === 'mobile' ? '移动端' : '桌面端'} 截图</span>
+                        <span className="ml-auto flex items-center gap-2">
+                          <button
+                            className="inline-flex items-center gap-1 text-xs font-medium text-foreground-muted hover:text-foreground"
+                            onClick={() => openShotPicker(strategy)}
+                            disabled={shotUploading !== ''}
+                          >
+                            <ImageUp className="h-3.5 w-3.5" />
+                            {shotUploading === strategy ? '上传中…' : '替换截图'}
+                          </button>
+                        </span>
+                      </div>
+                      <div className="p-3">
+                        <img
+                          src={psShotUrl(strategy)}
+                          alt={`PageSpeed ${strategy === 'mobile' ? '移动端' : '桌面端'} 截图`}
+                          className="max-h-64 w-full cursor-zoom-in rounded-md border border-border object-contain"
+                          onClick={() => window.open(psShotUrl(strategy), '_blank')}
+                          onError={(e) => {
+                            ;(e.target as HTMLImageElement).style.display = 'none'
+                          }}
+                          loading="lazy"
+                        />
+                      </div>
+                    </div>
                   ))}
                 </div>
 
@@ -398,7 +471,6 @@ export default function RunsPage() {
                               className="h-7 w-[104px] text-xs"
                               options={[
                                 { value: 'pass', label: '通过' },
-                                { value: 'warn', label: '警告' },
                                 { value: 'fail', label: '失败' },
                                 { value: 'skip', label: '跳过' },
                                 { value: 'verify', label: '待验收' }
@@ -407,9 +479,6 @@ export default function RunsPage() {
                           </div>
                           <div className="mt-1.5 text-sm font-medium">{r.ruleName}</div>
                         </div>
-                        <Badge color={r.severity === 'critical' ? 'red' : r.severity === 'warning' ? 'amber' : 'gray'}>
-                          {r.severity === 'critical' ? '必须' : r.severity === 'warning' ? '警告' : '建议'}
-                        </Badge>
                       </div>
                       <dl className="mt-2.5 space-y-1 text-xs">
                         <div className="flex gap-2">

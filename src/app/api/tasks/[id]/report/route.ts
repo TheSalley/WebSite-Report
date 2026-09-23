@@ -20,7 +20,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params
   try {
     const data = await buildReportData(Number(id))
-    const html = buildReportHtml(data)
+    const html = await buildReportHtml(data)
     const url = new URL(request.url)
     if (url.searchParams.get('format') === 'html') {
       return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })

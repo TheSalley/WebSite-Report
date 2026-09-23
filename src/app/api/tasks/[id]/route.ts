@@ -12,6 +12,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
   return NextResponse.json({
     ...t,
     verifyCount: t.verifyCount ?? 0,
+    error: t.error ?? null,
     pagespeed: t.pagespeedJson ? JSON.parse(t.pagespeedJson) : null,
     site,
     ruleSet,

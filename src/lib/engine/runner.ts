@@ -122,29 +122,41 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
       ctx.params = rule.params ?? {}
       ctx.ruleKey = rule.ruleKey
 
-      let outcome: RuleOutcome = rule.ruleKey.startsWith('verify.')
-        ? {
-            status: 'verify',
-            actual: '待人工验收',
-            expected: '按合同约定完成并确认',
-            description: '人工交付项，需验收人员确认后更新状态'
-          }
-        : {
-            status: 'fail',
-            actual: '',
-            expected: '',
-            description: '规则未实现'
-          }
+      let outcome: RuleOutcome
+      if (rule.params?.defaultPass === true) {
+        // 规则配置为「默认通过」：跳过实际检测，直接按通过计
+        outcome = {
+          status: 'pass',
+          actual: '默认通过（规则已配置为直接通过）',
+          expected: '按合同约定完成并确认',
+          description: '该规则已配置为默认通过，无需实际检测'
+        }
+      } else {
+        outcome = rule.ruleKey.startsWith('verify.')
+          ? {
+              status: 'verify',
+              actual: '待人工验收',
+              expected: '按合同约定完成并确认',
+              description: '人工交付项，需验收人员确认后更新状态'
+            }
+          : {
+              status: 'fail',
+              actual: '',
+              expected: '',
+              description: '规则未实现'
+            }
 
-      if (handler) {
-        try {
-          outcome = await handler(ctx)
-        } catch (e) {
-          outcome = {
-            status: 'fail',
-            actual: (e as Error).message.slice(0, 120),
-            expected: '规则执行成功',
-            description: `规则执行异常: ${(e as Error).message.slice(0, 80)}`
+        // 非 verify 规则且有处理器：执行实际检测（defaultPass 时不进入这里）
+        if (handler && outcome.status === 'fail') {
+          try {
+            outcome = await handler(ctx)
+          } catch (e) {
+            outcome = {
+              status: 'fail',
+              actual: (e as Error).message.slice(0, 120),
+              expected: '规则执行成功',
+              description: `规则执行异常: ${(e as Error).message.slice(0, 80)}`
+            }
           }
         }
       }

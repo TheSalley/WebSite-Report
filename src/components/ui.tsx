@@ -206,7 +206,7 @@ export function Spinner({ className = '' }: { className?: string }) {
 export function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; color: 'green' | 'amber' | 'red' | 'gray' | 'blue' }> = {
     pass: { label: '通过', color: 'green' },
-    warn: { label: '警告', color: 'amber' },
+    warn: { label: '通过', color: 'green' },
     fail: { label: '失败', color: 'red' },
     skip: { label: '跳过', color: 'gray' },
     verify: { label: '待验收', color: 'blue' },

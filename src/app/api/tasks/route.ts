@@ -21,6 +21,7 @@ async function decorateTasks() {
       verifyCount: t.verifyCount ?? 0,
       startedAt: t.startedAt,
       finishedAt: t.finishedAt,
+      error: t.error ?? null,
       pagespeed: t.pagespeedJson ? JSON.parse(t.pagespeedJson) : null,
       site: sites.get(t.siteId) ?? null,
       ruleSet: sets.get(t.ruleSetId) ?? null,

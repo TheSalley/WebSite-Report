@@ -17,7 +17,7 @@ const features = [
   {
     icon: FileText,
     title: '截图取证与报告',
-    desc: '失败/警告项自动全页截图，一键生成所见即所得报告（可打印 PDF）。',
+    desc: '自动全页截图取证，一键生成所见即所得报告（可打印 PDF）。',
     accent: 'from-amber-500 to-orange-500'
   },
   {
@@ -46,7 +46,7 @@ export default function Home() {
             网站合规性检测
           </h1>
           <p className="mt-3 max-w-2xl leading-7 text-foreground-muted">
-            输入网址，选择规则集，真实浏览器深度检测站点合规性，自动截图取证并生成得分报告。
+            输入网址，选择规则集，真实浏览器深度检测站点合规性，自动截图取证并生成交付报告。
             面向质检/合规人员、项目交付与网站运营人员。
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
