@@ -79,7 +79,7 @@ export default function ReportSettingsPage() {
                 <img
                   src={settings.logoPath.startsWith('data:') ? settings.logoPath : settings.logoPath}
                   alt="logo"
-                  className="h-10 rounded-md border border-border bg-gradient-to-r from-blue-800 to-blue-950 object-contain px-2 py-1"
+                  className="h-10 rounded-md border border-border object-contain px-2 py-1"
                 />
               ) : (
                 <span className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-border-strong text-foreground-subtle">

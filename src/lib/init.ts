@@ -23,5 +23,28 @@ export async function initData(): Promise<void> {
     maxRuleId += rows.length
     await replaceRules(rs.id, rows)
   }
+
+  // 内置规则集已存在时，仅补缺失的 description（不覆盖用户已配置的值）
+  const seedByKey = new Map<string, string>()
+  for (const def of BUILTIN_RULE_SETS) {
+    for (const seed of def.rules) {
+      if (seed.description) seedByKey.set(seed.ruleKey, seed.description)
+    }
+  }
+  const merged = await listRules()
+  let patched = false
+  for (const r of merged) {
+    if ((!r.description || !r.description.trim()) && seedByKey.has(r.ruleKey)) {
+      r.description = seedByKey.get(r.ruleKey) as string
+      patched = true
+    }
+  }
+  if (patched) {
+    const sets = await listRuleSets()
+    for (const rs of sets) {
+      const rows = merged.filter((r) => r.ruleSetId === rs.id)
+      if (rows.length > 0) await replaceRules(rs.id, rows)
+    }
+  }
 }
 

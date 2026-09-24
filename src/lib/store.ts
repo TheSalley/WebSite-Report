@@ -68,8 +68,8 @@ export interface RuleRow {
   groupName: string
   ruleKey: string
   name: string
-  severity: 'critical' | 'warning' | 'suggest'
   enabled: boolean
+  description?: string
   params: Record<string, unknown>
   sortOrder: number
 }
@@ -108,7 +108,6 @@ export interface CheckResultRow {
   ruleKey: string
   ruleName: string
   groupName: string
-  severity: 'critical' | 'warning' | 'suggest'
   status: 'pass' | 'warn' | 'fail' | 'skip' | 'verify'
   actualValue: string
   expectedValue: string

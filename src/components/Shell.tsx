@@ -25,8 +25,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-background text-foreground">
       {/* 桌面侧边栏 */}
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border bg-background-elevated md:flex">
-        {/* 品牌区（深蓝渐变底衬托白色 LOGO） */}
-        <div className="flex h-16 items-center border-b border-border bg-gradient-to-r from-blue-800 to-blue-950 px-5">
+        {/* 品牌区 */}
+        <div className="flex h-16 items-center border-b border-border px-5">
           <img src="/logo.svg" alt="KUKA" className="h-9 w-auto object-contain" />
         </div>
 
@@ -58,7 +58,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* 移动端顶栏 */}
-      <div className="fixed inset-x-0 top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-gradient-to-r from-blue-800 to-blue-950 px-4 md:hidden">
+      <div className="fixed inset-x-0 top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background-elevated px-4 md:hidden">
         <img src="/logo.svg" alt="KUKA" className="h-7 w-auto object-contain" />
         <ThemeToggle />
       </div>

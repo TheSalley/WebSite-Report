@@ -4,7 +4,7 @@ const steps = [
   { icon: Globe, title: '1. 添加站点', desc: '在「站点管理」新建或批量导入待检测网站。', accent: 'text-sky-500 bg-sky-500/10' },
   { icon: ListChecks, title: '2. 选择规则集', desc: '选用内置「全面检查」或「快速安全」，也可自定义规则与阈值。', accent: 'text-violet-500 bg-violet-500/10' },
   { icon: ShieldCheck, title: '3. 开始检测', desc: '在「检测与历史」一键运行，后台真实浏览器渲染页面，实时显示进度。', accent: 'text-emerald-500 bg-emerald-500/10' },
-  { icon: FileText, title: '4. 查看报告', desc: '检测完成后查看逐项结果、截图证据与 PageSpeed 评分，导出 PDF 报告。', accent: 'text-amber-500 bg-amber-500/10' }
+  { icon: FileText, title: '4. 查看报告', desc: '检测完成后查看逐项结果、截图证据与 PageSpeed 截图，导出 PDF 报告。', accent: 'text-amber-500 bg-amber-500/10' }
 ]
 
 const groups = [

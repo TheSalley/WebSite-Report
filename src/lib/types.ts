@@ -1,6 +1,3 @@
-/** 严重级别：必须 / 警告 / 建议 */
-export type Severity = 'critical' | 'warning' | 'suggest'
-
 /** 单条检测项结果状态 */
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'skip' | 'verify'
 
@@ -49,8 +46,8 @@ export interface Rule {
   groupName: string
   ruleKey: string
   name: string
-  severity: Severity
   enabled: boolean
+  description?: string
   params: Record<string, unknown>
   sortOrder: number
 }
@@ -59,7 +56,6 @@ export interface RuleInput {
   groupName: string
   ruleKey: string
   name: string
-  severity: Severity
   enabled?: boolean
   params?: Record<string, unknown>
   sortOrder?: number
@@ -100,7 +96,6 @@ export interface CheckResult {
   ruleKey: string
   ruleName: string
   groupName: string
-  severity: Severity
   status: CheckStatus
   actualValue: string
   expectedValue: string

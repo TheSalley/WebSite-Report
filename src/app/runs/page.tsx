@@ -111,6 +111,17 @@ export default function RunsPage() {
     }
   }
 
+  /** 静默刷新当前任务结果：不清空列表，避免页面高度抖动导致滚动跳顶 */
+  const reloadResults = async () => {
+    if (!selectedTask) return
+    try {
+      const data = await fetch(`/api/tasks/${selectedTask.id}/results`).then((r) => r.json())
+      setResults(data as CheckResult[])
+    } catch {
+      // 刷新失败保留现有数据
+    }
+  }
+
   const saveNote = async (resultId: number) => {
     const note = noteDrafts[resultId] ?? ''
     await fetch(`/api/tasks/${selectedTask?.id}/results/${resultId}`, {
@@ -118,8 +129,12 @@ export default function RunsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ note })
     })
-    setNoteDrafts((d) => ({ ...d, [resultId]: '' }))
-    if (selectedTask) openTask(selectedTask)
+    setNoteDrafts((d) => {
+      const next = { ...d }
+      delete next[resultId]
+      return next
+    })
+    await reloadResults()
   }
 
   const updateStatus = async (resultId: number, status: string) => {
@@ -129,7 +144,7 @@ export default function RunsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     })
-    await openTask(selectedTask)
+    await reloadResults()
     loadAll()
   }
 
@@ -484,10 +499,6 @@ export default function RunsPage() {
                         <div className="flex gap-2">
                           <dt className="w-12 shrink-0 text-foreground-subtle">实际值</dt>
                           <dd className="min-w-0 break-all text-foreground-muted">{r.actualValue || '—'}</dd>
-                        </div>
-                        <div className="flex gap-2">
-                          <dt className="w-12 shrink-0 text-foreground-subtle">期望值</dt>
-                          <dd className="min-w-0 break-all text-foreground-muted">{r.expectedValue || '—'}</dd>
                         </div>
                         <div className="flex gap-2">
                           <dt className="w-12 shrink-0 text-foreground-subtle">说明</dt>

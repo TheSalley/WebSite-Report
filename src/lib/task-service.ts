@@ -283,7 +283,7 @@ export async function updateResultStatus(resultId: number, status: CheckStatus):
   const row = await updateCheckResultStatus(resultId, status)
   if (!row) return
   const all = await listCheckResults(row.taskId)
-  const score = computeScore(all.map((r) => ({ status: r.status, severity: r.severity })))
+  const score = computeScore(all.map((r) => ({ status: r.status })))
   await updateTask(row.taskId, {
     score: score.score,
     passCount: score.passCount,

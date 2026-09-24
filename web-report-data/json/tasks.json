@@ -103,5 +103,37 @@
     "startedAt": "2026-09-23T08:25:33.018Z",
     "finishedAt": "2026-09-23T08:27:17.629Z",
     "pagespeedJson": "{\"fetchedAt\":\"2026-09-23T08:25:48.020Z\",\"mobile\":{\"strategy\":\"mobile\",\"fetchedAt\":\"2026-09-23T08:26:10.505Z\",\"ok\":true,\"categories\":[{\"id\":\"performance\",\"title\":\"Performance\",\"score\":39},{\"id\":\"accessibility\",\"title\":\"Accessibility\",\"score\":89},{\"id\":\"best-practices\",\"title\":\"Best Practices\",\"score\":56},{\"id\":\"seo\",\"title\":\"SEO\",\"score\":86}],\"metrics\":[{\"id\":\"first-contentful-paint\",\"title\":\"首次内容绘制 (FCP)\",\"displayValue\":\"3.6 s\",\"score\":32},{\"id\":\"largest-contentful-paint\",\"title\":\"最大内容绘制 (LCP)\",\"displayValue\":\"20.1 s\",\"score\":0},{\"id\":\"total-blocking-time\",\"title\":\"总阻塞时间 (TBT)\",\"displayValue\":\"810 ms\",\"score\":36},{\"id\":\"cumulative-layout-shift\",\"title\":\"累计布局偏移 (CLS)\",\"displayValue\":\"0\",\"score\":100},{\"id\":\"speed-index\",\"title\":\"速度指数 (SI)\",\"displayValue\":\"14.3 s\",\"score\":1},{\"id\":\"interactive\",\"title\":\"可交互时间 (TTI)\",\"displayValue\":\"13.7 s\",\"score\":11}]},\"desktop\":{\"strategy\":\"desktop\",\"fetchedAt\":\"2026-09-23T08:26:26.869Z\",\"ok\":true,\"categories\":[{\"id\":\"performance\",\"title\":\"Performance\",\"score\":32},{\"id\":\"accessibility\",\"title\":\"Accessibility\",\"score\":90},{\"id\":\"best-practices\",\"title\":\"Best Practices\",\"score\":56},{\"id\":\"seo\",\"title\":\"SEO\",\"score\":83}],\"metrics\":[{\"id\":\"first-contentful-paint\",\"title\":\"首次内容绘制 (FCP)\",\"displayValue\":\"2.5 s\",\"score\":15},{\"id\":\"largest-contentful-paint\",\"title\":\"最大内容绘制 (LCP)\",\"displayValue\":\"6.1 s\",\"score\":4},{\"id\":\"total-blocking-time\",\"title\":\"总阻塞时间 (TBT)\",\"displayValue\":\"690 ms\",\"score\":15},{\"id\":\"cumulative-layout-shift\",\"title\":\"累计布局偏移 (CLS)\",\"displayValue\":\"0.003\",\"score\":100},{\"id\":\"speed-index\",\"title\":\"速度指数 (SI)\",\"displayValue\":\"10.0 s\",\"score\":0},{\"id\":\"interactive\",\"title\":\"可交互时间 (TTI)\",\"displayValue\":\"19.7 s\",\"score\":0}]}}"
+  },
+  {
+    "id": 8,
+    "siteId": 1,
+    "ruleSetId": 5,
+    "status": "success",
+    "score": 80,
+    "passCount": 8,
+    "warnCount": 4,
+    "failCount": 1,
+    "skipCount": 0,
+    "verifyCount": 27,
+    "startedAt": "2026-09-24T08:33:09.810Z",
+    "finishedAt": "2026-09-24T08:35:55.932Z",
+    "pagespeedJson": "{\"fetchedAt\":\"2026-09-24T08:33:44.273Z\",\"mobile\":{\"strategy\":\"mobile\",\"fetchedAt\":\"2026-09-24T08:34:12.552Z\",\"ok\":true,\"categories\":[{\"id\":\"performance\",\"title\":\"Performance\",\"score\":34},{\"id\":\"accessibility\",\"title\":\"Accessibility\",\"score\":89},{\"id\":\"best-practices\",\"title\":\"Best Practices\",\"score\":56},{\"id\":\"seo\",\"title\":\"SEO\",\"score\":86}],\"metrics\":[{\"id\":\"first-contentful-paint\",\"title\":\"首次内容绘制 (FCP)\",\"displayValue\":\"4.3 s\",\"score\":18},{\"id\":\"largest-contentful-paint\",\"title\":\"最大内容绘制 (LCP)\",\"displayValue\":\"19.5 s\",\"score\":0},{\"id\":\"total-blocking-time\",\"title\":\"总阻塞时间 (TBT)\",\"displayValue\":\"1,130 ms\",\"score\":23},{\"id\":\"cumulative-layout-shift\",\"title\":\"累计布局偏移 (CLS)\",\"displayValue\":\"0\",\"score\":100},{\"id\":\"speed-index\",\"title\":\"速度指数 (SI)\",\"displayValue\":\"16.8 s\",\"score\":0},{\"id\":\"interactive\",\"title\":\"可交互时间 (TTI)\",\"displayValue\":\"14.4 s\",\"score\":9}]},\"desktop\":{\"strategy\":\"desktop\",\"fetchedAt\":\"2026-09-24T08:34:32.369Z\",\"ok\":true,\"categories\":[{\"id\":\"performance\",\"title\":\"Performance\",\"score\":29},{\"id\":\"accessibility\",\"title\":\"Accessibility\",\"score\":90},{\"id\":\"best-practices\",\"title\":\"Best Practices\",\"score\":56},{\"id\":\"seo\",\"title\":\"SEO\",\"score\":83}],\"metrics\":[{\"id\":\"first-contentful-paint\",\"title\":\"首次内容绘制 (FCP)\",\"displayValue\":\"3.2 s\",\"score\":4},{\"id\":\"largest-contentful-paint\",\"title\":\"最大内容绘制 (LCP)\",\"displayValue\":\"22.6 s\",\"score\":0},{\"id\":\"total-blocking-time\",\"title\":\"总阻塞时间 (TBT)\",\"displayValue\":\"790 ms\",\"score\":11},{\"id\":\"cumulative-layout-shift\",\"title\":\"累计布局偏移 (CLS)\",\"displayValue\":\"0.003\",\"score\":100},{\"id\":\"speed-index\",\"title\":\"速度指数 (SI)\",\"displayValue\":\"12.9 s\",\"score\":0},{\"id\":\"interactive\",\"title\":\"可交互时间 (TTI)\",\"displayValue\":\"20.0 s\",\"score\":0}]}}",
+    "error": null
+  },
+  {
+    "id": 9,
+    "siteId": 3,
+    "ruleSetId": 5,
+    "status": "success",
+    "score": 94,
+    "passCount": 22,
+    "warnCount": 1,
+    "failCount": 1,
+    "skipCount": 0,
+    "verifyCount": 2,
+    "startedAt": "2026-09-24T08:59:48.315Z",
+    "finishedAt": "2026-09-24T09:03:30.122Z",
+    "pagespeedJson": "{\"fetchedAt\":\"2026-09-24T09:00:03.826Z\",\"mobile\":{\"strategy\":\"mobile\",\"fetchedAt\":\"2026-09-24T09:01:22.509Z\",\"ok\":true,\"categories\":[{\"id\":\"performance\",\"title\":\"Performance\",\"score\":55},{\"id\":\"accessibility\",\"title\":\"Accessibility\",\"score\":94},{\"id\":\"best-practices\",\"title\":\"Best Practices\",\"score\":100},{\"id\":\"seo\",\"title\":\"SEO\",\"score\":86}],\"metrics\":[{\"id\":\"first-contentful-paint\",\"title\":\"首次内容绘制 (FCP)\",\"displayValue\":\"12.9 s\",\"score\":0},{\"id\":\"largest-contentful-paint\",\"title\":\"最大内容绘制 (LCP)\",\"displayValue\":\"18.2 s\",\"score\":0},{\"id\":\"total-blocking-time\",\"title\":\"总阻塞时间 (TBT)\",\"displayValue\":\"60 ms\",\"score\":100},{\"id\":\"cumulative-layout-shift\",\"title\":\"累计布局偏移 (CLS)\",\"displayValue\":\"0\",\"score\":100},{\"id\":\"speed-index\",\"title\":\"速度指数 (SI)\",\"displayValue\":\"18.3 s\",\"score\":0},{\"id\":\"interactive\",\"title\":\"可交互时间 (TTI)\",\"displayValue\":\"23.5 s\",\"score\":1}]},\"desktop\":{\"strategy\":\"desktop\",\"fetchedAt\":\"2026-09-24T09:01:51.511Z\",\"ok\":true,\"categories\":[{\"id\":\"performance\",\"title\":\"Performance\",\"score\":51},{\"id\":\"accessibility\",\"title\":\"Accessibility\",\"score\":88},{\"id\":\"best-practices\",\"title\":\"Best Practices\",\"score\":100},{\"id\":\"seo\",\"title\":\"SEO\",\"score\":83}],\"metrics\":[{\"id\":\"first-contentful-paint\",\"title\":\"首次内容绘制 (FCP)\",\"displayValue\":\"3.6 s\",\"score\":2},{\"id\":\"largest-contentful-paint\",\"title\":\"最大内容绘制 (LCP)\",\"displayValue\":\"6.5 s\",\"score\":3},{\"id\":\"total-blocking-time\",\"title\":\"总阻塞时间 (TBT)\",\"displayValue\":\"130 ms\",\"score\":94},{\"id\":\"cumulative-layout-shift\",\"title\":\"累计布局偏移 (CLS)\",\"displayValue\":\"0.102\",\"score\":89},{\"id\":\"speed-index\",\"title\":\"速度指数 (SI)\",\"displayValue\":\"13.4 s\",\"score\":0},{\"id\":\"interactive\",\"title\":\"可交互时间 (TTI)\",\"displayValue\":\"23.7 s\",\"score\":0}]}}",
+    "error": null
   }
 ]

@@ -3,446 +3,324 @@
     "ruleSetId": 5,
     "groupName": "网站规划",
     "ruleKey": "verify.plan.cycle",
-    "name": "建站周期（4—6 周交付）",
-    "severity": "warning",
+    "name": "建站周期",
     "enabled": true,
     "params": {},
     "sortOrder": 0,
-    "id": 89
+    "description": "4—6 周",
+    "id": 120
   },
   {
     "ruleSetId": 5,
     "groupName": "网站规划",
     "ruleKey": "verify.plan.strategy",
-    "name": "网站建设规划（行业定位定制结构路径）",
-    "severity": "warning",
+    "name": "网站建设规划",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 1,
-    "id": 90
+    "description": "基于行业特性与品牌定位，量身定制网站结构与用户体验路径，助力高效转化",
+    "id": 121
   },
   {
     "ruleSetId": 5,
     "groupName": "网站规划",
     "ruleKey": "verify.plan.style",
-    "name": "精选样式库（品牌视觉 1 套模板）",
-    "severity": "suggest",
+    "name": "精选样式库",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 2,
-    "id": 91
+    "description": "精选一站式样式库，打造独特品牌视觉风格",
+    "id": 122
   },
   {
     "ruleSetId": 5,
     "groupName": "网站建设",
     "ruleKey": "verify.build.banner",
-    "name": "Banner 创意设计（交付 3 张品牌视觉）",
-    "severity": "suggest",
+    "name": "Banner 创意设计(3 张)",
     "enabled": true,
     "params": {},
     "sortOrder": 3,
-    "id": 92
+    "description": "由专业设计师操刀，融合品牌调性，提升首页视觉冲击力与用户停留时长",
+    "id": 123
   },
   {
     "ruleSetId": 5,
     "groupName": "网站建设",
     "ruleKey": "verify.build.pages",
-    "name": "常规页面搭建（交付 10 个基础页面）",
-    "severity": "warning",
+    "name": "常规页面搭建",
     "enabled": true,
     "params": {},
     "sortOrder": 4,
-    "id": 93
+    "description": "搭建首页、产品、博客等10个标准样式页面，覆盖业务全场景",
+    "id": 124
   },
   {
     "ruleSetId": 5,
     "groupName": "网站建设",
     "ruleKey": "content.viewport",
     "name": "响应式设计（移动端 viewport 正确）",
-    "severity": "critical",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 5,
-    "id": 94
+    "description": "全设备自适应，确保手机、电脑浏览体验一致流畅",
+    "id": 125
   },
   {
     "ruleSetId": 5,
     "groupName": "网站建设",
     "ruleKey": "contract.contact",
-    "name": "多转化入口（全局/页内询盘表单）",
-    "severity": "warning",
+    "name": "多转化入口",
     "enabled": true,
     "params": {
       "defaultPass": true
     },
     "sortOrder": 6,
-    "id": 95
+    "description": "设置全局与页面内询盘表单，提升转化率",
+    "id": 126
   },
   {
     "ruleSetId": 5,
     "groupName": "网站建设",
     "ruleKey": "contract.search",
-    "name": "全站搜索功能内置可用",
-    "severity": "warning",
+    "name": "全站搜索功能",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 7,
-    "id": 96
+    "description": "内置搜索框，便于用户迅速检索定位站内内容",
+    "id": 127
   },
   {
     "ruleSetId": 5,
     "groupName": "网站建设",
     "ruleKey": "compliance.privacy",
-    "name": "隐私政策页（海外推广合规）",
-    "severity": "warning",
+    "name": "隐私政策页",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 9,
-    "id": 97
+    "description": "配置隐私政策页，符合海外推广合规要求",
+    "id": 128
   },
   {
     "ruleSetId": 5,
     "groupName": "网站建设",
     "ruleKey": "contract.gtranslate",
-    "name": "Google 翻译插件（一键多语言）",
-    "severity": "suggest",
+    "name": "Google 翻译插件",
     "enabled": true,
     "params": {},
     "sortOrder": 10,
-    "id": 98
+    "description": "免费提供 Google 内嵌翻译插件，支持切换多语言，提升海外用户体验",
+    "id": 129
   },
   {
     "ruleSetId": 5,
     "groupName": "网站建设",
     "ruleKey": "verify.build.thanks",
-    "name": "感谢页跳转跟踪已埋点",
-    "severity": "suggest",
+    "name": "感谢页跳转跟踪",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 11,
-    "id": 99
+    "description": "精准跟踪转化行为，减少统计误差",
+    "id": 130
   },
   {
     "ruleSetId": 5,
     "groupName": "功能与优化",
     "ruleKey": "contract.ga",
-    "name": "GA 预埋（流量统计可追踪）",
-    "severity": "warning",
+    "name": "GA 预埋",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 12,
-    "id": 100
+    "description": "后台支持设置Google Analytics 代码，便于数据跟踪",
+    "id": 131
   },
   {
     "ruleSetId": 5,
     "groupName": "功能与优化",
     "ruleKey": "security.https",
     "name": "HTTPS 安全证书部署",
-    "severity": "critical",
     "enabled": true,
     "params": {
       "defaultPass": true
     },
     "sortOrder": 13,
-    "id": 101
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "功能与优化",
-    "ruleKey": "seo.title.exists",
-    "name": "SEO：title 标签存在且非空",
-    "severity": "critical",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 16,
-    "id": 102
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "功能与优化",
-    "ruleKey": "seo.meta.description",
-    "name": "SEO：meta description 存在",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 18,
-    "id": 103
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "功能与优化",
-    "ruleKey": "seo.robots.txt",
-    "name": "SEO：robots.txt 可访问",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 20,
-    "id": 104
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "功能与优化",
-    "ruleKey": "seo.sitemap.xml",
-    "name": "SEO：sitemap.xml 可访问",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 21,
-    "id": 105
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "功能与优化",
-    "ruleKey": "seo.h1.exists",
-    "name": "SEO：唯一 h1 标题",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 22,
-    "id": 106
+    "description": "部署SSL证书，支持HTTPS协议，提升网站安全性",
+    "id": 132
   },
   {
     "ruleSetId": 5,
     "groupName": "功能与优化",
     "ruleKey": "verify.optimize.html",
-    "name": "HTML 优化（URL/Title/H1/Alt/Meta 自定义）",
-    "severity": "warning",
+    "name": "HTML 优化",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 23,
-    "id": 107
+    "description": "支持自定义URL、Title、H1、图片Alt",
+    "id": 133
   },
   {
     "ruleSetId": 5,
     "groupName": "功能与优化",
     "ruleKey": "verify.optimize.server",
-    "name": "基础 AWS 海外服务器（2vCPU/8GB/20GB）",
-    "severity": "warning",
+    "name": "基础AWS 海外服务器",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 24,
-    "id": 108
+    "description": "配置2vCPU+8GB内存+20GB空间，支持最多100个产品",
+    "id": 134
   },
   {
     "ruleSetId": 5,
     "groupName": "功能与优化",
     "ruleKey": "verify.optimize.firewall",
-    "name": "免费版防火墙（CloudFlare/QUIC.cloud 1 年）",
-    "severity": "suggest",
+    "name": "免费版防火墙",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 25,
-    "id": 109
+    "description": "CloudFlare或QUIC.cloud免费防火墙，有效过滤恶意流量与网络攻击，为网站提供基础而可靠的安全防护",
+    "id": 135
   },
   {
     "ruleSetId": 5,
     "groupName": "功能与优化",
     "ruleKey": "verify.optimize.cdn",
-    "name": "安全与 CDN 加速服务（1 年）",
-    "severity": "suggest",
+    "name": "安全与CDN 加速服务",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 26,
-    "id": 110
+    "description": "提供免费版CloudFlare或QUIC.cloud防护与CDN加速服务，提升访问速度与安全",
+    "id": 136
   },
   {
     "ruleSetId": 5,
     "groupName": "后台管理",
     "ruleKey": "verify.admin.news",
-    "name": "新闻管理（批量/分类/图文编辑/回收）",
-    "severity": "warning",
+    "name": "新闻管理",
     "enabled": true,
     "params": {
       "defaultPass": true
     },
     "sortOrder": 27,
-    "id": 111
+    "description": "批量上传功能\n新闻分类功能\n图文自由编辑排版\n一键快速编辑修改\n自定义设置发布日期\n回收恢复已删除新闻，数据可逆",
+    "id": 137
   },
   {
     "ruleSetId": 5,
     "groupName": "后台管理",
     "ruleKey": "verify.admin.product",
-    "name": "产品管理（批量/分类/图文/回收）",
-    "severity": "warning",
+    "name": "产品管理",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 28,
-    "id": 112
+    "description": "批量上传功能\n产品分类功能\n一键快速编辑修改\n支持产品的图片加文字信息上传\n回收恢复已删除产品，数据可逆",
+    "id": 138
   },
   {
     "ruleSetId": 5,
     "groupName": "后台管理",
     "ruleKey": "verify.admin.files",
-    "name": "多格式文件管理（上传/筛选/删除）",
-    "severity": "suggest",
+    "name": "多格式文件管理",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 29,
-    "id": 113
+    "description": "支持不同格式的媒体文件进行上传、筛选、删除，方便统一管理",
+    "id": 139
   },
   {
     "ruleSetId": 5,
     "groupName": "后台管理",
     "ruleKey": "verify.admin.youtube",
     "name": "YouTube 视频嵌入",
-    "severity": "suggest",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 30,
-    "id": 114
+    "description": "支持Youtube视频无缝嵌入网站，丰富内容形式，延长访客停留时间，提升网站转化率与品牌专业度",
+    "id": 140
   },
   {
     "ruleSetId": 5,
     "groupName": "后台管理",
     "ruleKey": "verify.admin.mail",
-    "name": "邮件管理（询盘查看/导出）",
-    "severity": "suggest",
+    "name": "询盘管理",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 31,
-    "id": 115
+    "description": "后台查看导出询盘数据",
+    "id": 141
   },
   {
     "ruleSetId": 5,
     "groupName": "后台管理",
     "ruleKey": "verify.admin.onboard",
     "name": "Onboard 智慧网站解决方案",
-    "severity": "suggest",
     "enabled": true,
-    "params": {},
+    "params": {
+      "defaultPass": true
+    },
     "sortOrder": 32,
-    "id": 116
+    "description": "集成AI策略与多平台社媒嵌入，一站式管理",
+    "id": 142
   },
   {
     "ruleSetId": 5,
     "groupName": "图文内容",
     "ruleKey": "verify.content.fill",
-    "name": "图文填充（协助落地 10 页素材）",
-    "severity": "warning",
+    "name": "图文填充",
     "enabled": true,
     "params": {},
     "sortOrder": 33,
-    "id": 117
+    "description": "基于行业特性与营销策略，提供素材规格说明，协助上传落地10个已搭建页面的图文素材",
+    "id": 143
   },
   {
     "ruleSetId": 5,
     "groupName": "图文内容",
     "ruleKey": "verify.content.product",
-    "name": "产品代上传（1—5 个）",
-    "severity": "suggest",
+    "name": "产品代上传",
     "enabled": true,
     "params": {},
     "sortOrder": 34,
-    "id": 118
+    "description": "专业产品信息整理与人工上传服务，包括标题、描述、图片优化，提升产品吸引力",
+    "id": 144
   },
   {
     "ruleSetId": 5,
     "groupName": "图文内容",
     "ruleKey": "verify.content.blog",
-    "name": "博文代上传（1—4 篇）",
-    "severity": "suggest",
+    "name": "新闻代上传",
     "enabled": true,
     "params": {},
     "sortOrder": 35,
-    "id": 119
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "售后支持",
-    "ruleKey": "verify.support.inspection",
-    "name": "网站日常巡检",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 39,
-    "id": 122
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "售后支持",
-    "ruleKey": "verify.support.bugfix",
-    "name": "紧急 Bug 修复",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 40,
-    "id": 123
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "售后支持",
-    "ruleKey": "verify.support.perf",
-    "name": "性能与安全优化（CDN/缓存/数据库/备份）",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 41,
-    "id": 124
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "售后支持",
-    "ruleKey": "verify.support.ssl",
-    "name": "SSL 证书全生命周期管理",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 42,
-    "id": 125
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "售后支持",
-    "ruleKey": "verify.support.security",
-    "name": "安全防护与巡检（漏洞扫描）",
-    "severity": "warning",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 43,
-    "id": 126
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "售后支持",
-    "ruleKey": "verify.support.training",
-    "name": "后台培训与操作手册（1 份）",
-    "severity": "suggest",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 44,
-    "id": 127
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "售后支持",
-    "ruleKey": "verify.support.content",
-    "name": "上线内容技术支持",
-    "severity": "suggest",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 45,
-    "id": 128
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "售后支持",
-    "ruleKey": "verify.support.rollback",
-    "name": "免费数据回滚一次",
-    "severity": "suggest",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 46,
-    "id": 129
-  },
-  {
-    "ruleSetId": 5,
-    "groupName": "售后支持",
-    "ruleKey": "verify.support.source",
-    "name": "免费提供源代码（1 次）",
-    "severity": "suggest",
-    "enabled": true,
-    "params": {},
-    "sortOrder": 47,
-    "id": 130
+    "description": "支持品牌故事、行业洞察、公司动态等内容的新闻/Blog人工上传，增强SEO与用户粘性",
+    "id": 145
   }
 ]

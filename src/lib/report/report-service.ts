@@ -125,7 +125,6 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
       ruleKey: r.ruleKey,
       ruleName: r.ruleName,
       groupName: r.groupName,
-      severity: r.severity,
       status: r.status,
       actualValue: r.actualValue,
       expectedValue: r.expectedValue,
@@ -230,9 +229,8 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
             idx === 0
               ? `<td rowspan="${groupResults.length}" class="group-cell">${escapeHtml(groupName)}<span class="group-count">${groupResults.length} 项</span></td>`
               : ''
-          const noteHtml = r.note ? `<div class="note">复核备注：${escapeHtml(r.note)}</div>` : ''
+          const noteHtml = r.note ? `<div class="note">备注：${escapeHtml(r.note)}</div>` : ''
           const descParts: string[] = []
-          if (r.expectedValue) descParts.push(`<span class="desc-label">期望：</span>${escapeHtml(r.expectedValue)}`)
           if (r.description) descParts.push(escapeHtml(r.description))
           const descHtml = descParts.join('；')
           return `<tr>
@@ -245,45 +243,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
         .join('')
     )
     .join('')
-
-  // ── PageSpeed 表（合同式）──
-  const pagespeedSection = (() => {
-    const ps = data.pagespeed
-    if (!ps) return ''
-    const rows: string[] = []
-    for (const strategy of ['mobile', 'desktop'] as const) {
-      const psItem = strategy === 'mobile' ? ps.mobile : ps.desktop
-      if (!psItem) continue
-      const title = strategy === 'mobile' ? '移动端' : '桌面端'
-      if (!psItem.ok) {
-        rows.push(`<tr><td class="group-cell">${title}</td><td colspan="2" class="ps-error">${escapeHtml(psItem.error ?? '获取失败')}</td></tr>`)
-        continue
-      }
-      const cats = (psItem.categories ?? [])
-        .map((cat) => { const sc = cat.score ?? 0; const color = sc >= 90 ? '#16a34a' : sc >= 50 ? '#d97706' : '#dc2626'; return `${escapeHtml(cat.title)} <b style="color:${color}">${cat.score == null ? '—' : sc}</b>` })
-        .join('　')
-      const metrics = (psItem.metrics ?? [])
-        .map((m) => `${escapeHtml(m.title)} ${escapeHtml(m.displayValue)}`)
-        .join('　')
-      rows.push(`<tr>
-        <td class="group-cell">${title}</td>
-        <td class="item-cell">评分类别</td>
-        <td class="desc-cell">${cats}</td>
-      </tr>`)
-      if (metrics) {
-        rows.push(`<tr>
-          <td class="group-cell"></td>
-          <td class="item-cell">核心指标</td>
-          <td class="desc-cell">${metrics}</td>
-        </tr>`)
-      }
-    }
-    if (rows.length === 0) return ''
-    return `<table class="contract-table ps-table">
-      <thead><tr><th style="width:12%">通道</th><th style="width:16%">项目</th><th>内容</th></tr></thead>
-      <tbody>${rows.join('')}</tbody>
-    </table>`
-  })()
 
   // ── 截图（仅 PageSpeed 移动端/桌面端页面截图）──
   const shotItems = pagespeedShots.filter((s) => s.dataUrl)
@@ -320,11 +279,11 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   }
   .report-root h1, .report-root h2, .report-root h3 { margin: 0; font-weight: 700; }
 
-  /* 报告抬头（合同式居中标题，深蓝渐变底衬托 LOGO） */
-  .header { text-align: center; background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 55%, #14244a 100%); border-radius: 14px; padding: 26px 28px 24px; box-shadow: 0 8px 24px rgba(30,64,175,.18); margin-bottom: 26px; }
-  .header h1 { font-size: 24px; letter-spacing: 3px; color: #ffffff; }
-  .header .company { margin-top: 6px; font-size: 13px; color: #93c5fd; font-weight: 600; }
-  .header .doc-no { margin-top: 8px; font-size: 12px; color: #cbd5e1; }
+  /* 报告抬头（合同式居中标题） */
+  .header { text-align: center; background: #fff; border-radius: 14px; border-top: 4px solid #2563eb; padding: 26px 28px 24px; box-shadow: 0 2px 12px rgba(37,99,235,.06); margin-bottom: 26px; }
+  .header h1 { font-size: 24px; letter-spacing: 3px; color: #1e293b; }
+  .header .company { margin-top: 6px; font-size: 13px; color: #2563eb; font-weight: 600; }
+  .header .doc-no { margin-top: 8px; font-size: 12px; color: #64748b; }
 
   h2.section-title { font-size: 15px; font-weight: 700; color: #1e293b; border-left: 4px solid #2563eb; padding-left: 10px; margin: 26px 0 12px; letter-spacing: .5px; }
 
@@ -360,7 +319,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .sev-critical { color: #b91c1c; border-color: #b91c1c; background: #fef2f2; }
   .sev-warning { color: #b45309; border-color: #b45309; background: #fffbeb; }
   .sev-suggest { color: #6b7280; border-color: #6b7280; background: #fafafa; }
-  .desc-cell .desc-label { color: #6b7280; }
   .desc-cell .note { margin-top: 4px; padding: 3px 6px; background: #fffbeb; border-left: 3px solid #f59e0b; font-size: 12px; }
 
   .badge { display: inline-block; border: 1px solid; border-radius: 999px; padding: 2px 12px; font-size: 12px; font-weight: 600; white-space: nowrap; letter-spacing: .3px; }
@@ -371,9 +329,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .badge-verify { color: #2563eb; border-color: #2563eb; background: #eff6ff; }
   .deliver-cell { text-align: center; }
   .status-cell .actual { margin-top: 3px; font-size: 12px; color: #444; max-width: 220px; word-break: break-all; }
-
-  /* PageSpeed */
-  .ps-table .ps-error { color: #b91c1c; }
 
   /* 证据截图 */
   .shot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -386,7 +341,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
 <div class="report-root">
 
   <div class="header">
-    ${logoDataUrl ? `<img src="${logoDataUrl}" alt="logo" style="height:44px;margin-bottom:10px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));" />` : ''}
+    ${logoDataUrl ? `<img src="${logoDataUrl}" alt="logo" style="display:block;height:44px;margin:0 auto 10px;object-fit:contain;" />` : ''}
     <h1>${escapeHtml(settings.reportTitle || '网站合规性检测报告')}</h1>
     ${settings.companyName ? `<div class="company">${escapeHtml(settings.companyName)}</div>` : ''}
     <div class="doc-no">报告编号：WEB-REPORT-${String(task.id).padStart(4, '0')}　　生成日期：${escapeHtml(generatedAt)}</div>
@@ -420,8 +375,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     </thead>
     <tbody>${mainRows}</tbody>
   </table>
-
-  ${pagespeedSection ? `${sectionTitle('PageSpeed 评分')}${pagespeedSection}` : ''}
 
   ${screenshotSection ? `${sectionTitle('PageSpeed 评分截图')}${screenshotSection}` : ''}
 

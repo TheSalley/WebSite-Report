@@ -266,6 +266,12 @@ export default function RulesPage() {
                                 <div className="min-w-0 flex-1">
                                   <div className="text-sm font-medium">{rule.name}</div>
                                   <div className="font-mono text-[11px] text-foreground-subtle">{rule.ruleKey}</div>
+                                  <Input
+                                    className="mt-1.5 h-8 text-xs"
+                                    value={rule.description ?? ''}
+                                    onChange={(e) => patchRule(rule, { description: e.target.value })}
+                                    placeholder="内容说明（留空则用检测结果动态描述）"
+                                  />
                                 </div>
                                 <label className="flex items-center gap-1.5 text-xs text-foreground-muted" title="开启后检测直接按「通过」计，跳过实际检测">
                                   <Switch

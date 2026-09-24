@@ -7,11 +7,11 @@ import { computeScore, type ScoreResult } from './scoring'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { RuleContext, RuleOutcome } from './types'
-import type { CheckStatus, Severity } from '../types'
+import type { CheckStatus } from '../types'
 
 export interface RunTaskOptions {
   url: string
-  rules: { id: number; ruleKey: string; name: string; groupName: string; severity: Severity; enabled: boolean; params: Record<string, unknown> }[]
+  rules: { id: number; ruleKey: string; name: string; groupName: string; enabled: boolean; description?: string; params: Record<string, unknown> }[]
   taskId: number
   /** 截图根目录（默认临时目录 web-report-screenshots） */
   screenshotBaseDir?: string
@@ -27,7 +27,6 @@ export interface RunRuleResult {
   ruleKey: string
   ruleName: string
   groupName: string
-  severity: Severity
   status: CheckStatus
   actualValue: string
   expectedValue: string
@@ -63,6 +62,10 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
 
   const results: RunRuleResult[] = []
 
+  /** 结果说明：优先取规则配置的 description（合同条款），否则用引擎动态描述 */
+  const desc = (rule: RunTaskOptions['rules'][number], fallback: string): string =>
+    rule.description && rule.description.trim() ? rule.description.trim() : fallback
+
   try {
     // 加载页面
     let snapshot: Awaited<ReturnType<typeof captureSnapshot>>
@@ -77,7 +80,6 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
         ruleKey: 'task.page_load',
         ruleName: '页面加载',
         groupName: '任务',
-        severity: 'critical',
         status: 'fail',
         actualValue: '加载失败',
         expectedValue: '页面可访问',
@@ -91,7 +93,6 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           ruleKey: rule.ruleKey,
           ruleName: rule.name,
           groupName: rule.groupName,
-          severity: rule.severity,
           status: 'skip',
           actualValue: '',
           expectedValue: '',
@@ -100,7 +101,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           note: ''
         })
       }
-      const score = computeScore(results.map((r) => ({ status: r.status, severity: r.severity })))
+      const score = computeScore(results.map((r) => ({ status: r.status })))
       return { results, score }
     }
 
@@ -172,11 +173,10 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
         ruleKey: rule.ruleKey,
         ruleName: rule.name,
         groupName: rule.groupName,
-        severity: rule.severity,
         status: outcome.status,
         actualValue: outcome.actual,
         expectedValue: outcome.expected,
-        description: outcome.description,
+        description: desc(rule, outcome.description),
         screenshotPath,
         note: ''
       })
@@ -192,7 +192,6 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           ruleKey: rule.ruleKey,
           ruleName: rule.name,
           groupName: rule.groupName,
-          severity: rule.severity,
           status: 'skip',
           actualValue: '',
           expectedValue: '',
@@ -203,7 +202,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
       }
     }
 
-    const score = computeScore(results.map((r) => ({ status: r.status, severity: r.severity })))
+    const score = computeScore(results.map((r) => ({ status: r.status })))
     return { results, score }
   } finally {
     await page.context().close().catch(() => undefined)
