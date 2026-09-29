@@ -13,6 +13,8 @@ interface SeedRule {
   ruleKey: string
   name: string
   description?: string
+  /** 交付成果文案（可留空，自动用预设） */
+  deliverable?: string
   params?: Record<string, unknown>
 }
 
@@ -99,6 +101,7 @@ export function toRuleRows(
   name: string
   enabled: boolean
   description?: string
+  deliverable?: string
   params: Record<string, unknown>
   sortOrder: number
 }[] {
@@ -110,6 +113,7 @@ export function toRuleRows(
     name: r.name,
     enabled: true,
     description: r.description,
+    deliverable: r.deliverable && r.deliverable.trim() ? r.deliverable : DELIVERABLE_PRESETS[r.ruleKey] ?? '',
     params: r.params ?? {},
     sortOrder: idx
   }))
@@ -121,6 +125,7 @@ export function getRuleCatalog(): {
   ruleKey: string
   name: string
   description?: string
+  deliverable?: string
   params: Record<string, unknown>
 }[] {
   const seen = new Set<string>()
@@ -129,6 +134,7 @@ export function getRuleCatalog(): {
     ruleKey: string
     name: string
     description?: string
+    deliverable?: string
     params: Record<string, unknown>
   }[] = []
   for (const def of BUILTIN_RULE_SETS) {
@@ -140,9 +146,69 @@ export function getRuleCatalog(): {
         ruleKey: seed.ruleKey,
         name: seed.name,
         description: seed.description,
+        deliverable: seed.deliverable && seed.deliverable.trim() ? seed.deliverable : DELIVERABLE_PRESETS[seed.ruleKey] ?? '',
         params: seed.params ?? {}
       })
     }
   }
   return catalog
+}
+
+
+/** 预设交付成果文案：按规则 key 提供默认「交付成果」，规则页可覆盖 */
+export const DELIVERABLE_PRESETS: Record<string, string> = {
+  'verify.plan.cycle': '交付建站周期排期表：4—6 周按里程碑推进',
+  'verify.plan.strategy': '交付《网站建设规划方案》：行业定位 + 定制结构路径',
+  'verify.plan.style': '交付精选样式库与品牌视觉模板 1 套',
+  'verify.build.banner': '交付 Banner 创意设计 3 张品牌视觉图',
+  'verify.build.pages': '交付 10 个基础标准页面',
+  'content.viewport': '移动端 viewport 配置正确，全设备自适应',
+  'contract.contact': '已部署全局/页内询盘表单',
+  'contract.search': '已内置全站搜索功能',
+  'compliance.privacy': '已配置隐私政策页',
+  'contract.gtranslate': '已嵌入 Google 翻译插件',
+  'verify.build.thanks': '感谢页跳转跟踪已埋点',
+  'contract.ga': 'GA 代码已预埋，流量可追踪',
+  'security.https': 'HTTPS 证书已部署',
+  'seo.title.exists': 'Title 标签已配置',
+  'seo.meta.description': 'Meta Description 已配置',
+  'seo.robots.txt': 'robots.txt 可正常访问',
+  'seo.sitemap.xml': 'sitemap.xml 可正常访问',
+  'seo.h1.exists': 'H1 标题唯一且已配置',
+  'verify.optimize.html': 'URL/Title/H1/Alt/Meta 已完成自定义优化',
+  'verify.optimize.server': 'AWS 海外服务器已交付（2vCPU/8GB/20GB）',
+  'verify.optimize.firewall': '免费版防火墙已开通（CloudFlare/QUIC.cloud 1 年）',
+  'verify.optimize.cdn': 'CDN 与安全加速服务已启用（1 年）',
+  'verify.admin.news': '新闻管理后台已交付（批量/分类/图文编辑/回收）',
+  'verify.admin.product': '产品管理后台已交付（批量/分类/图文/回收）',
+  'verify.admin.files': '多格式文件管理功能已交付',
+  'verify.admin.youtube': 'YouTube 视频嵌入功能已交付',
+  'verify.admin.mail': '邮件管理已开通（询盘查看/导出）',
+  'verify.admin.onboard': 'Onboard 智慧网站解决方案已集成',
+  'verify.content.fill': '已协助落地 10 页图文素材',
+  'verify.content.product': '已完成产品代上传 1—5 个',
+  'verify.content.blog': '已完成博文代上传 1—4 篇',
+  'verify.support.inspection': '提供网站日常巡检服务',
+  'verify.support.bugfix': '提供紧急 Bug 修复服务',
+  'verify.support.perf': '提供性能与安全优化服务',
+  'verify.support.ssl': '提供 SSL 证书全生命周期管理',
+  'verify.support.security': '提供安全防护与漏洞扫描巡检',
+  'verify.support.training': '已交付后台培训与操作手册 1 份',
+  'verify.support.content': '提供上线内容技术支持',
+  'verify.support.rollback': '提供免费数据回滚 1 次',
+  'verify.support.source': '提供免费源代码移交 1 次'
+}
+
+/** 获取规则预设交付成果文案（无预设返回空串） */
+export function presetDeliverable(ruleKey: string): string {
+  return DELIVERABLE_PRESETS[ruleKey] ?? ''
+}
+
+/** 将规则行补充预设交付成果：行内未定义时自动填充预设文案 */
+export function applyDeliverablePreset(row: { ruleKey: string; deliverable?: string }): { ruleKey: string; deliverable?: string } {
+  if (!row.deliverable || !row.deliverable.trim()) {
+    const preset = DELIVERABLE_PRESETS[row.ruleKey]
+    if (preset) row.deliverable = preset
+  }
+  return row
 }

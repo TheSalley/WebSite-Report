@@ -11,7 +11,7 @@ import type { CheckStatus } from '../types'
 
 export interface RunTaskOptions {
   url: string
-  rules: { id: number; ruleKey: string; name: string; groupName: string; enabled: boolean; description?: string; params: Record<string, unknown> }[]
+  rules: { id: number; ruleKey: string; name: string; groupName: string; enabled: boolean; description?: string; deliverable?: string; params: Record<string, unknown> }[]
   taskId: number
   /** 截图根目录（默认临时目录 web-report-screenshots） */
   screenshotBaseDir?: string
@@ -31,6 +31,8 @@ export interface RunRuleResult {
   actualValue: string
   expectedValue: string
   description: string
+  /** 交付成果文案（预设/自定义） */
+  deliverable: string
   screenshotPath: string | null
   note: string
 }
@@ -84,6 +86,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
         actualValue: '加载失败',
         expectedValue: '页面可访问',
         description: msg,
+        deliverable: '',
         screenshotPath: null,
         note: ''
       })
@@ -97,6 +100,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           actualValue: '',
           expectedValue: '',
           description: '页面加载失败，未执行',
+          deliverable: rule.deliverable ?? '',
           screenshotPath: null,
           note: ''
         })
@@ -177,6 +181,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
         actualValue: outcome.actual,
         expectedValue: outcome.expected,
         description: desc(rule, outcome.description),
+        deliverable: rule.deliverable ?? '',
         screenshotPath,
         note: ''
       })
@@ -196,6 +201,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           actualValue: '',
           expectedValue: '',
           description: '任务已取消',
+          deliverable: rule.deliverable ?? '',
           screenshotPath: null,
           note: ''
         })

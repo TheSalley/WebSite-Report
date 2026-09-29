@@ -47,6 +47,8 @@ export interface Rule {
   ruleKey: string
   name: string
   enabled: boolean
+  /** 交付成果文案（报告「交付成果」列；留空显示状态徽章） */
+  deliverable?: string
   description?: string
   params: Record<string, unknown>
   sortOrder: number
@@ -97,6 +99,8 @@ export interface CheckResult {
   ruleName: string
   groupName: string
   status: CheckStatus
+  /** 交付成果文案（预留来自规则的预设/自定义） */
+  deliverable?: string
   actualValue: string
   expectedValue: string
   description: string

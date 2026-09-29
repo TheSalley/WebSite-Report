@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { DATA_DIR, getTask, getSite, getRuleSet, listCheckResults } from '../store'
 import { getReportSettings } from '../settings'
+import { DELIVERABLE_PRESETS } from '../seed'
 import { getBrowser } from '../engine/browser'
 
 import type { CheckResult, ReportSettings, Site, RuleSet, Task } from '../types'
@@ -129,6 +130,7 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
       actualValue: r.actualValue,
       expectedValue: r.expectedValue,
       description: r.description,
+      deliverable: (r.deliverable && r.deliverable.trim() ? r.deliverable : DELIVERABLE_PRESETS[r.ruleKey] ?? ''),
       screenshotPath: r.screenshotPath,
       note: r.note,
       checkedAt: r.checkedAt,
@@ -237,7 +239,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
             ${firstCell}
             <td class="item-cell"><div class="item-name">${escapeHtml(r.ruleName)}</div></td>
             <td class="desc-cell">${descHtml}${noteHtml}</td>
-            <td class="deliver-cell">${statusBadgeHtml(r.status)}</td>
+            <td class="deliver-cell">${r.deliverable && r.deliverable.trim() ? `<span class="deliver-text">${escapeHtml(r.deliverable)}</span>` : statusBadgeHtml(r.status)}</td>
           </tr>`
         })
         .join('')
@@ -327,7 +329,8 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .badge-fail { color: #b91c1c; border-color: #b91c1c; background: #fef2f2; }
   .badge-skip { color: #6b7280; border-color: #6b7280; background: #fafafa; }
   .badge-verify { color: #2563eb; border-color: #2563eb; background: #eff6ff; }
-  .deliver-cell { text-align: center; }
+  .deliver-cell { text-align: center; vertical-align: middle; }
+  .deliver-cell .deliver-text { display: inline-block; text-align: left; font-size: 12px; line-height: 1.6; color: #334155; word-break: break-word; }
   .status-cell .actual { margin-top: 3px; font-size: 12px; color: #444; max-width: 220px; word-break: break-all; }
 
   /* 证据截图 */

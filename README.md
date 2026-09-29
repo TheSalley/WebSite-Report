@@ -87,7 +87,7 @@ src/
 
 ## 已知限制
 
-- 本地 JSON 存储，适合单机/小团队；多用户并发需换数据库（如 SQLite/Postgres）
+- 本地 SQLite 存储（Node 内置 ode:sqlite，零额外依赖），适合单机/小团队；多用户并发可换 Postgres
 - PageSpeed 本地 Lighthouse 只支持 Node 运行环境，Serverless 部署需改用纯 PSI API
 - 批量检测暂为单任务逐个执行；周期巡检、账号体系为二期方向
 

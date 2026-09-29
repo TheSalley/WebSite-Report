@@ -27,6 +27,7 @@ export default function RunsPage() {
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [noteDrafts, setNoteDrafts] = React.useState<Record<number, string>>({})
   const [shotUploading, setShotUploading] = React.useState<'' | 'mobile' | 'desktop'>('')
+  const [shotVersion, setShotVersion] = React.useState(0)
   const shotFileRef = React.useRef<HTMLInputElement | null>(null)
   const shotStrategyRef = React.useRef<'mobile' | 'desktop'>('mobile')
 
@@ -166,7 +167,8 @@ export default function RunsPage() {
       const res = await fetch(`/api/tasks/${selectedTask.id}/pagespeed-shot`, { method: 'POST', body })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? '上传失败')
-      // 刷新任务数据（截图地址是文件路径，直接加时间戳刷新缓存即可）
+      // 截图已覆盖写入，自增版本号让图片 URL 带新参数，绕过浏览器强缓存
+      setShotVersion((v) => v + 1)
       await loadAll()
     } catch (err) {
       setError((err as Error).message)
@@ -176,7 +178,7 @@ export default function RunsPage() {
   }
 
   const psShotUrl = (strategy: 'mobile' | 'desktop') =>
-    selectedTask ? `/api/screenshots/task-${selectedTask.id}/pagespeed-${strategy}.png` : ''
+    selectedTask ? `/api/screenshots/task-${selectedTask.id}/pagespeed-${strategy}.png?v=${shotVersion}` : ''
 
   const reportUrl = selectedTask ? `/reports/${selectedTask.id}` : ''
   const filteredResults = results.filter((r) => statusFilter === 'all' || r.status === statusFilter)

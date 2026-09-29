@@ -272,6 +272,12 @@ export default function RulesPage() {
                                     onChange={(e) => patchRule(rule, { description: e.target.value })}
                                     placeholder="内容说明（留空则用检测结果动态描述）"
                                   />
+                                  <Input
+                                    className="mt-1.5 h-8 text-xs"
+                                    value={rule.deliverable ?? ''}
+                                    onChange={(e) => patchRule(rule, { deliverable: e.target.value })}
+                                    placeholder="交付成果（留空则使用预设文案）"
+                                  />
                                 </div>
                                 <label className="flex items-center gap-1.5 text-xs text-foreground-muted" title="开启后检测直接按「通过」计，跳过实际检测">
                                   <Switch
