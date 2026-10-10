@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock, ImageUp, Smartphone, Monitor } from 'lucide-react'
+import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock, ImageUp, Smartphone, Monitor, ScrollText } from 'lucide-react'
 import { Button, Card, Dialog, Input, Select, Empty, Spinner, StatusBadge } from '@/components/ui'
 import type { Task, Site, RuleSet, CheckResult } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
@@ -28,6 +28,9 @@ export default function RunsPage() {
   const [noteDrafts, setNoteDrafts] = React.useState<Record<number, string>>({})
   const [shotUploading, setShotUploading] = React.useState<'' | 'mobile' | 'desktop'>('')
   const [shotVersion, setShotVersion] = React.useState(0)
+  const [taskLogs, setTaskLogs] = React.useState<string[]>([])
+  const [logsOpen, setLogsOpen] = React.useState(false)
+  const [cancelling, setCancelling] = React.useState<number | null>(null)
   const shotFileRef = React.useRef<HTMLInputElement | null>(null)
   const shotStrategyRef = React.useRef<'mobile' | 'desktop'>('mobile')
 
@@ -97,7 +100,27 @@ export default function RunsPage() {
   }
 
   const cancelTask = async (id: number) => {
-    await fetch(`/api/tasks/${id}/cancel`, { method: 'POST' })
+    if (!confirm(`确定终止任务 #${id} 吗？已完成的检测结果会被保留。`)) return
+    setCancelling(id)
+    try {
+      await fetch(`/api/tasks/${id}/cancel`, { method: 'POST' })
+      await loadAll()
+    } catch {
+      setError('终止请求失败，请重试')
+    } finally {
+      setCancelling(null)
+    }
+  }
+
+
+  const loadTaskLogs = async (id: number) => {
+    try {
+      const data = await fetchJson<{ lines: string[] }>(`/api/tasks/${id}/log`)
+      setTaskLogs(data.lines.slice(-200))
+      setLogsOpen(true)
+    } catch {
+      setError('读取日志失败')
+    }
   }
 
   const openTask = async (task: TaskRow) => {
@@ -286,8 +309,8 @@ export default function RunsPage() {
                     <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         {t.status === 'running' && (
-                          <Button variant="ghost" size="sm" onClick={() => cancelTask(t.id)}>
-                            <X className="h-3.5 w-3.5" />
+                          <Button variant="ghost" size="sm" onClick={() => cancelTask(t.id)} disabled={cancelling === t.id}>
+                            {cancelling === t.id ? <Spinner /> : <X className="h-3.5 w-3.5" />}
                           </Button>
                         )}
                         <Button variant="ghost" size="sm" onClick={() => deleteTask(t.id)}>
@@ -370,6 +393,14 @@ export default function RunsPage() {
                   </Button>
                 </Link>
               )}
+              {selectedTask.status === 'running' && (
+                <Button variant="outline" size="sm" onClick={() => cancelTask(selectedTask.id)} disabled={cancelling === selectedTask.id}>
+                  {cancelling === selectedTask.id ? <Spinner /> : <X className="h-3.5 w-3.5" />} 终止任务
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => loadTaskLogs(selectedTask.id)}>
+                <ScrollText className="h-3.5 w-3.5" /> 查看日志
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => setSelectedTask(null)}>
                 关闭
               </Button>
@@ -528,6 +559,25 @@ export default function RunsPage() {
           </div>
         </Card>
       )}
+
+      {/* 任务日志弹窗 */}
+      <Dialog
+        open={logsOpen}
+        onClose={() => setLogsOpen(false)}
+        title={"任务日志" + (selectedTask ? ` #${selectedTask.id}` : '')}
+        width="max-w-2xl"
+        footer={<Button variant="outline" onClick={() => setLogsOpen(false)}>关闭</Button>}
+      >
+        <div className="max-h-[420px] space-y-1 overflow-y-auto rounded-md bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-100 dark:bg-black/60">
+          {taskLogs.length === 0 ? (
+            <div className="py-6 text-center text-zinc-400">暂无日志（任务可能尚未产生日志，或日志文件不存在）</div>
+          ) : (
+            taskLogs.map((line, idx) => (
+              <div key={idx} className="whitespace-pre-wrap break-all">{line}</div>
+            ))
+          )}
+        </div>
+      </Dialog>
     </div>
   )
 }

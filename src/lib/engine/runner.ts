@@ -8,6 +8,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import type { RuleContext, RuleOutcome } from './types'
 import type { CheckStatus } from '../types'
+import { logInfo, logWarn, logError } from '../logger'
 
 export interface RunTaskOptions {
   url: string
@@ -57,6 +58,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
   const total = enabledRules.length
   let done = 0
 
+  logInfo(`开始检测任务 taskId=${taskId} url=${url} 启用规则数=${enabledRules.length}`, taskId)
   const baseDir = options.screenshotBaseDir ?? join(tmpdir(), 'web-report-screenshots')
   const screenshotManager = new ScreenshotManager(taskId, baseDir)
   const page = await newPage()
@@ -77,6 +79,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
     } catch (e) {
       // 页面加载失败：全部规则标记为未执行，另加一条任务级失败说明
       const msg = (e as Error).message.slice(0, 200)
+      logError('页面加载失败', e, taskId)
       results.push({
         ruleId: null,
         ruleKey: 'task.page_load',
@@ -121,7 +124,11 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
 
     // 逐条执行规则
     for (const rule of enabledRules) {
-      if (options.signal?.cancelled) break
+      if (options.signal?.cancelled) {
+        logWarn(`任务取消信号已置位，终止于 ${rule.ruleKey}`, taskId)
+        break
+      }
+      logInfo(`执行规则 ${rule.ruleKey}（${rule.name}）`, taskId)
 
       const handler = getRuleHandler(rule.ruleKey)
       ctx.params = rule.params ?? {}
@@ -156,6 +163,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           try {
             outcome = await handler(ctx)
           } catch (e) {
+            logError(`规则 ${rule.ruleKey} 执行异常`, e, taskId)
             outcome = {
               status: 'fail',
               actual: (e as Error).message.slice(0, 120),
@@ -208,6 +216,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
       }
     }
 
+    logInfo(`检测完成，规则结果数=${results.length}`, taskId)
     const score = computeScore(results.map((r) => ({ status: r.status })))
     return { results, score }
   } finally {

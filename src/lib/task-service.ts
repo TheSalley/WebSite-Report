@@ -1,11 +1,12 @@
 import { join } from 'path'
-import { mkdir } from 'fs/promises'
+
 import { DATA_DIR } from './store'
 import type { CheckStatus } from './types'
 import { runTask, shutdownEngine } from './engine/runner'
 import { computeScore } from './engine/scoring'
 import { getBrowser } from './engine/browser'
 import { fetchPageSpeed } from './engine/pagespeed'
+import { capturePagespeedShots } from './pagespeed-shots'
 import {
   createTask,
   getTask,
@@ -20,6 +21,7 @@ import {
   deleteTask
 } from './store'
 import type { RuleRow } from './store'
+import { logInfo, logWarn, logError } from './logger'
 
 /** 运行中任务的状态（进程内存） */
 export interface RunningTaskState {
@@ -39,119 +41,6 @@ export function getRunningState(taskId: number): RunningTaskState | null {
   return runningTasks.get(taskId) ?? null
 }
 
-/** 采集 pagespeed.web.dev 测速得分报告截图（移动端/桌面端） */
-async function capturePagespeedShots(taskId: number, url: string): Promise<void> {
-  try {
-    const dir = join(DATA_DIR, 'screenshots', 'task-' + taskId)
-    await mkdir(dir, { recursive: true })
-    const browser = await getBrowser()
-    const context = await browser.newContext({
-      viewport: { width: 1366, height: 1400 },
-      locale: 'zh-CN',
-      deviceScaleFactor: 1
-    })
-    try {
-      const page = await context.newPage()
-
-      /** 轮询等待得分卡片出现（页面报告文本出现 性能+无障碍 分数即可） */
-      const waitScoreDom = async (timeoutMs: number): Promise<boolean> => {
-        const deadline = Date.now() + timeoutMs
-        while (Date.now() < deadline) {
-          const ready = await page
-            .evaluate(() => {
-              const w = document.querySelector('.lh-scores-wrapper') as HTMLElement | null
-              const hasScore = /性能\s*\d{1,3}/.test(document.body.innerText || '') && /无障碍\s*\d{1,3}/.test(document.body.innerText || '')
-              return !!w && hasScore
-            })
-            .catch(() => false)
-          if (ready) return true
-          await page.waitForTimeout(3000)
-        }
-        return false
-      }
-
-      /** 截取得分报告区域：诊断标题 + 得分卡片 + 指标区 */
-      const shotScore = async (strategy: string): Promise<void> => {
-        if (!(await waitScoreDom(240000))) {
-          console.warn('pagespeed.web.dev ' + strategy + ' 得分等待超时，跳过截图')
-          return
-        }
-        // 滚动到得分卡片顶部，留出标题空间
-        await page.evaluate(() => {
-          const w = document.querySelector('.lh-scores-wrapper') as HTMLElement | null
-          if (w) {
-            const y = Math.max(0, w.getBoundingClientRect().top + window.scrollY - 90)
-            window.scrollTo(0, y)
-          }
-        })
-        await page.waitForTimeout(1500)
-        // 计算截图区域（含标题 + 得分卡 + 部分指标）
-        const clip = await page.evaluate(() => {
-          const wrapper = document.querySelector('.lh-scores-wrapper') as HTMLElement | null
-          if (!wrapper) return null
-          const rect = wrapper.getBoundingClientRect()
-          const visibleW = wrapper.scrollWidth || rect.width
-          const visibleH = wrapper.scrollHeight || rect.height
-          if (visibleW < 200 || rect.height < 10) return null
-          const left = Math.max(0, rect.left - 24)
-          const top = Math.max(0, rect.top - 14)
-          return {
-            x: left,
-            y: top,
-            width: Math.min(window.innerWidth - left, visibleW + 48),
-            height: Math.min(window.innerHeight - top, Math.max(visibleH, 140) + 560)
-          }
-        })
-        const file = join(dir, 'pagespeed-' + strategy + '.png')
-        if (clip && clip.width >= 300 && clip.height >= 200) {
-          await page.screenshot({ path: file, clip })
-        } else {
-          await page.screenshot({ path: file })
-        }
-        console.log('pagespeed.web.dev ' + strategy + ' 得分报告截图已保存: ' + file)
-      }
-
-      // 关闭 Cookie 横幅
-      const baseTarget = 'https://pagespeed.web.dev/analysis?url=' + encodeURIComponent(url)
-
-      // 移动端：打开默认分析页（自动触发移动端测速）
-      await page
-        .goto(baseTarget, { waitUntil: 'domcontentloaded', timeout: 60000 })
-        .catch(() => undefined)
-      try {
-        const cookieBtn = page.getByText('知道了', { exact: true })
-        if (await cookieBtn.isVisible({ timeout: 3000 })) await cookieBtn.click()
-      } catch {
-        /* 无横幅则忽略 */
-      }
-      await shotScore('mobile')
-
-      // 桌面端：点击「桌面设备」按钮触发桌面端分析（直接 goto desktop URL 不会触发）
-      try {
-        const desktopBtn = page.getByText('桌面设备', { exact: true }).first()
-        await desktopBtn.click({ timeout: 15000 })
-        console.log('pagespeed.web.dev 已切换桌面设备')
-      } catch {
-        // 兜底：重新打开默认页并再次尝试
-        try {
-          await page
-            .goto(baseTarget, { waitUntil: 'domcontentloaded', timeout: 60000 })
-            .catch(() => undefined)
-          const desktopBtn2 = page.getByText('桌面设备', { exact: true }).first()
-          await desktopBtn2.click({ timeout: 15000 })
-        } catch {
-          console.warn('pagespeed.web.dev 桌面端切换失败，跳过桌面截图')
-        }
-      }
-      await shotScore('desktop')
-    } finally {
-      await context.close().catch(() => undefined)
-    }
-  } catch (e) {
-    // 忽略：pagespeed.web.dev 截图失败不阻塞任务
-    console.warn('pagespeed.web.dev 截图异常: ' + (e as Error).message)
-  }
-}
 /**
  * 创建并执行检测任务：
  * - 持久化 task 记录
@@ -182,6 +71,7 @@ export async function startTask(siteId: number, ruleSetId: number): Promise<numb
     error: null
   }
   runningTasks.set(taskId, state)
+  logInfo(`任务创建，site=${site.name} ruleset=${ruleSet.name} 共${rules.length}条规则`, taskId)
 
   // 后台执行（不阻塞 API 响应）
   void runInBackground(taskId, site.url, rules, state)
@@ -191,6 +81,7 @@ export async function startTask(siteId: number, ruleSetId: number): Promise<numb
 
 /** 后台执行引擎并保存结果 */
 async function runInBackground(taskId: number, url: string, rules: RuleRow[], state: RunningTaskState): Promise<void> {
+  const startMillis = Date.now()
   try {
     const result = await runTask({
       url,
@@ -208,7 +99,23 @@ async function runInBackground(taskId: number, url: string, rules: RuleRow[], st
     })
 
     if (state.signal.cancelled) {
-      await updateTask(taskId, { status: 'stopped', finishedAt: new Date().toISOString() })
+      logWarn('任务已取消（规则检测阶段），保存已完成的中间结果', taskId)
+      // 取消时仍保存已执行的结果，便于查看已完成部分
+      await saveCheckResults(
+        taskId,
+        result.results.map((r) => ({ ...r, taskId, checkedAt: new Date().toISOString() }))
+      )
+      const score = result.score
+      await updateTask(taskId, {
+        status: 'stopped',
+        score: score.score,
+        passCount: score.passCount,
+        warnCount: score.warnCount,
+        failCount: score.failCount,
+        skipCount: score.skipCount,
+        verifyCount: score.verifyCount,
+        finishedAt: new Date().toISOString()
+      })
       return
     }
 
@@ -234,19 +141,38 @@ async function runInBackground(taskId: number, url: string, rules: RuleRow[], st
     // 采集 PageSpeed 评分与页面截图（失败不阻塞任务状态，仅记录）
     state.currentRuleKey = 'pagespeed'
     state.currentRuleName = 'PageSpeed 评分与截图'
-    try {
-      const pagespeed = await fetchPageSpeed(url)
-      await updateTask(taskId, { pagespeedJson: JSON.stringify(pagespeed) })
-      await capturePagespeedShots(taskId, url)
-    } catch {
-      // 忽略：网络/配额问题不影响主检测结果
+    logInfo('开始采集 PageSpeed 评分与截图', taskId)
+    if (state.signal.cancelled) {
+      logWarn('PageSpeed 采集前已被取消，跳过', taskId)
+    } else {
+      try {
+        const pagespeed = await fetchPageSpeed(url)
+        await updateTask(taskId, { pagespeedJson: JSON.stringify(pagespeed) })
+        logInfo('PageSpeed 评分采集完成', taskId)
+      } catch (e) {
+        logError('PageSpeed 评分采集异常（不影响主结果）', e, taskId)
+      }
+      // 取消后不再截图
+      if (state.signal.cancelled) {
+        logWarn('PageSpeed 截图前检测到取消，跳过截图', taskId)
+      } else {
+        try {
+          await capturePagespeedShots(taskId, url, state.signal)
+          logInfo('PageSpeed 页面截图完成', taskId)
+        } catch (e) {
+          logError('PageSpeed 截图异常（任务已尽力，不影响主结果）', e, taskId)
+        }
+      }
     }
 
     // 全部采集完成后再收尾：任务状态与完成时间（检测时间包含 PageSpeed 截图耗时）
+    const finishedAt = new Date().toISOString()
     await updateTask(taskId, {
-      status: 'success',
-      finishedAt: new Date().toISOString()
+      status: state.signal.cancelled ? 'stopped' : 'success',
+      finishedAt
     })
+    const elapsedSec = ((Date.now() - startMillis) / 1000).toFixed(1)
+    logInfo(`任务完成，耗时 ${elapsedSec}s，状态=${state.signal.cancelled ? 'stopped' : 'success'}`, taskId)
   } catch (e) {
     state.error = (e as Error).message
     await updateTask(taskId, {
@@ -254,17 +180,28 @@ async function runInBackground(taskId: number, url: string, rules: RuleRow[], st
       finishedAt: new Date().toISOString(),
       error: (e as Error).message
     })
+    logError('任务执行失败', e, taskId)
   } finally {
     runningTasks.delete(taskId)
   }
 }
 
-/** 取消运行中的任务 */
-export async function cancelTask(taskId: number): Promise<void> {
+/** 取消运行中的任务：立即返回，后台协程在安全点停止并保存状态 */
+export async function cancelTask(taskId: number): Promise<boolean> {
   const running = runningTasks.get(taskId)
-  if (running) {
-    running.signal.cancelled = true
+  if (!running) {
+    // 任务不在内存中（可能已结束或服务器重启）：直接回写 stopped，避免“永远 running”
+    const task = await getTask(taskId)
+    if (task && task.status === 'running') {
+      logWarn('任务不在运行表但状态为 running，直接标记为 stopped', taskId)
+      await updateTask(taskId, { status: 'stopped', finishedAt: new Date().toISOString() })
+      return true
+    }
+    return false
   }
+  running.signal.cancelled = true
+  logWarn('已发出取消信号', taskId)
+  return true
 }
 
 export async function removeTask(taskId: number): Promise<void> {

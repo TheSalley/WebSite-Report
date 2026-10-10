@@ -100,6 +100,15 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
   const site = (await getSite(rawTask.siteId))!
   const ruleSet = (await getRuleSet(rawTask.ruleSetId))!
 
+  const pagespeedRaw = rawTask.pagespeedJson ? JSON.parse(rawTask.pagespeedJson) as { fetchedAt?: string } : null
+  // 完成时间应包含 PageSpeed 采集耗时：取 max(任务收尾时间, PageSpeed 采集完成时间)
+  let finishedAt = rawTask.finishedAt
+  if (pagespeedRaw?.fetchedAt) {
+    const a = rawTask.finishedAt ? new Date(rawTask.finishedAt).getTime() : 0
+    const b = new Date(pagespeedRaw.fetchedAt).getTime()
+    if (!isNaN(b) && (b > a || a === 0)) finishedAt = pagespeedRaw.fetchedAt
+  }
+
   const task: Task = {
     id: rawTask.id,
     siteId: rawTask.siteId,
@@ -111,7 +120,7 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     failCount: rawTask.failCount,
     skipCount: rawTask.skipCount,
     startedAt: rawTask.startedAt,
-    finishedAt: rawTask.finishedAt,
+    finishedAt: finishedAt,
     site,
     ruleSet,
     pagespeed: rawTask.pagespeedJson ? JSON.parse(rawTask.pagespeedJson) : null

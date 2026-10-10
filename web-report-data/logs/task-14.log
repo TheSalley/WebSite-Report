@@ -1,0 +1,40 @@
+2026-10-08T03:50:40.434Z [INFO] [task:14] 任务创建，site=顾家旧站 ruleset=建站服务合同验收 共26条规则
+2026-10-08T03:50:40.434Z [INFO] [task:14] 开始检测任务 taskId=14 url=https://en.kukahome.com/ 启用规则数=26
+2026-10-08T03:50:56.474Z [INFO] [task:14] 执行规则 verify.plan.cycle（建站周期）
+2026-10-08T03:50:56.475Z [INFO] [task:14] 执行规则 verify.plan.strategy（网站建设规划）
+2026-10-08T03:50:56.475Z [INFO] [task:14] 执行规则 verify.plan.style（精选样式库）
+2026-10-08T03:50:56.475Z [INFO] [task:14] 执行规则 verify.build.banner（Banner 创意设计(3 张)）
+2026-10-08T03:50:56.476Z [INFO] [task:14] 执行规则 verify.build.pages（常规页面搭建）
+2026-10-08T03:50:56.477Z [INFO] [task:14] 执行规则 content.viewport（响应式设计（移动端 viewport 正确））
+2026-10-08T03:50:56.477Z [INFO] [task:14] 执行规则 contract.contact（多转化入口）
+2026-10-08T03:50:56.477Z [INFO] [task:14] 执行规则 contract.search（全站搜索功能）
+2026-10-08T03:50:56.477Z [INFO] [task:14] 执行规则 compliance.privacy（隐私政策页）
+2026-10-08T03:50:56.477Z [INFO] [task:14] 执行规则 contract.gtranslate（Google 翻译插件）
+2026-10-08T03:50:56.866Z [INFO] [task:14] 执行规则 verify.build.thanks（感谢页跳转跟踪）
+2026-10-08T03:50:56.866Z [INFO] [task:14] 执行规则 contract.ga（GA 预埋）
+2026-10-08T03:50:56.866Z [INFO] [task:14] 执行规则 security.https（HTTPS 安全证书部署）
+2026-10-08T03:50:56.867Z [INFO] [task:14] 执行规则 verify.optimize.html（HTML 优化）
+2026-10-08T03:50:56.867Z [INFO] [task:14] 执行规则 verify.optimize.server（基础AWS 海外服务器）
+2026-10-08T03:50:56.867Z [INFO] [task:14] 执行规则 verify.optimize.firewall（免费版防火墙）
+2026-10-08T03:50:56.867Z [INFO] [task:14] 执行规则 verify.optimize.cdn（安全与CDN 加速服务）
+2026-10-08T03:50:56.867Z [INFO] [task:14] 执行规则 verify.admin.news（新闻管理）
+2026-10-08T03:50:56.867Z [INFO] [task:14] 执行规则 verify.admin.product（产品管理）
+2026-10-08T03:50:56.868Z [INFO] [task:14] 执行规则 verify.admin.files（多格式文件管理）
+2026-10-08T03:50:56.868Z [INFO] [task:14] 执行规则 verify.admin.youtube（YouTube 视频嵌入）
+2026-10-08T03:50:56.868Z [INFO] [task:14] 执行规则 verify.admin.mail（询盘管理）
+2026-10-08T03:50:56.868Z [INFO] [task:14] 执行规则 verify.admin.onboard（Onboard 智慧网站解决方案）
+2026-10-08T03:50:56.868Z [INFO] [task:14] 执行规则 verify.content.fill（图文填充）
+2026-10-08T03:50:56.868Z [INFO] [task:14] 执行规则 verify.content.product（产品代上传）
+2026-10-08T03:50:56.869Z [INFO] [task:14] 执行规则 verify.content.blog（新闻代上传）
+2026-10-08T03:50:56.869Z [INFO] [task:14] 检测完成，规则结果数=26
+2026-10-08T03:50:56.923Z [INFO] [task:14] 开始采集 PageSpeed 评分与截图
+2026-10-08T03:51:51.038Z [INFO] [task:14] PageSpeed 评分采集完成
+2026-10-08T03:51:53.152Z [INFO] [task:14] 等待 pagespeed.web.dev mobile 得分卡片
+2026-10-08T03:55:53.981Z [WARN] [task:14] pagespeed.web.dev mobile 得分等待超时，改用页面可视区域兜底截图
+2026-10-08T03:55:55.550Z [INFO] [task:14] pagespeed.web.dev mobile 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-14\pagespeed-mobile.png
+2026-10-08T03:56:10.558Z [WARN] [task:14] pagespeed.web.dev 桌面端切换按钮不可用，尝试直接打开桌面端分析页
+2026-10-08T03:56:11.118Z [INFO] [task:14] 等待 pagespeed.web.dev desktop 得分卡片
+2026-10-08T04:00:11.995Z [WARN] [task:14] pagespeed.web.dev desktop 得分等待超时，改用页面可视区域兜底截图
+2026-10-08T04:00:13.553Z [INFO] [task:14] pagespeed.web.dev desktop 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-14\pagespeed-desktop.png
+2026-10-08T04:00:13.558Z [INFO] [task:14] PageSpeed 页面截图完成
+2026-10-08T04:00:13.591Z [INFO] [task:14] 任务完成，耗时 573.2s，状态=success

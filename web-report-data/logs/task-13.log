@@ -1,0 +1,42 @@
+2026-10-08T03:11:13.429Z [INFO] [task:13] 任务创建，site=公司官网 ruleset=建站服务合同验收 共26条规则
+2026-10-08T03:11:13.430Z [INFO] [task:13] 开始检测任务 taskId=13 url=https://en.yeehaiglobal.com/ 启用规则数=26
+2026-10-08T03:11:22.564Z [INFO] [task:13] 执行规则 verify.plan.cycle（建站周期）
+2026-10-08T03:11:22.564Z [INFO] [task:13] 执行规则 verify.plan.strategy（网站建设规划）
+2026-10-08T03:11:22.565Z [INFO] [task:13] 执行规则 verify.plan.style（精选样式库）
+2026-10-08T03:11:22.565Z [INFO] [task:13] 执行规则 verify.build.banner（Banner 创意设计(3 张)）
+2026-10-08T03:11:22.565Z [INFO] [task:13] 执行规则 verify.build.pages（常规页面搭建）
+2026-10-08T03:11:22.567Z [INFO] [task:13] 执行规则 content.viewport（响应式设计（移动端 viewport 正确））
+2026-10-08T03:11:22.567Z [INFO] [task:13] 执行规则 contract.contact（多转化入口）
+2026-10-08T03:11:22.567Z [INFO] [task:13] 执行规则 contract.search（全站搜索功能）
+2026-10-08T03:11:22.567Z [INFO] [task:13] 执行规则 compliance.privacy（隐私政策页）
+2026-10-08T03:11:22.567Z [INFO] [task:13] 执行规则 contract.gtranslate（Google 翻译插件）
+2026-10-08T03:11:23.989Z [INFO] [task:13] 执行规则 verify.build.thanks（感谢页跳转跟踪）
+2026-10-08T03:11:23.989Z [INFO] [task:13] 执行规则 contract.ga（GA 预埋）
+2026-10-08T03:11:23.989Z [INFO] [task:13] 执行规则 security.https（HTTPS 安全证书部署）
+2026-10-08T03:11:23.989Z [INFO] [task:13] 执行规则 verify.optimize.html（HTML 优化）
+2026-10-08T03:11:23.990Z [INFO] [task:13] 执行规则 verify.optimize.server（基础AWS 海外服务器）
+2026-10-08T03:11:23.990Z [INFO] [task:13] 执行规则 verify.optimize.firewall（免费版防火墙）
+2026-10-08T03:11:23.990Z [INFO] [task:13] 执行规则 verify.optimize.cdn（安全与CDN 加速服务）
+2026-10-08T03:11:23.990Z [INFO] [task:13] 执行规则 verify.admin.news（新闻管理）
+2026-10-08T03:11:23.991Z [INFO] [task:13] 执行规则 verify.admin.product（产品管理）
+2026-10-08T03:11:23.991Z [INFO] [task:13] 执行规则 verify.admin.files（多格式文件管理）
+2026-10-08T03:11:23.991Z [INFO] [task:13] 执行规则 verify.admin.youtube（YouTube 视频嵌入）
+2026-10-08T03:11:23.991Z [INFO] [task:13] 执行规则 verify.admin.mail（询盘管理）
+2026-10-08T03:11:23.992Z [INFO] [task:13] 执行规则 verify.admin.onboard（Onboard 智慧网站解决方案）
+2026-10-08T03:11:23.992Z [INFO] [task:13] 执行规则 verify.content.fill（图文填充）
+2026-10-08T03:11:23.992Z [INFO] [task:13] 执行规则 verify.content.product（产品代上传）
+2026-10-08T03:11:23.992Z [INFO] [task:13] 执行规则 verify.content.blog（新闻代上传）
+2026-10-08T03:11:23.993Z [INFO] [task:13] 检测完成，规则结果数=26
+2026-10-08T03:11:24.036Z [INFO] [task:13] 开始采集 PageSpeed 评分与截图
+2026-10-08T03:12:17.714Z [INFO] [task:13] PageSpeed 评分采集完成
+2026-10-08T03:12:19.839Z [INFO] [task:13] 等待 pagespeed.web.dev mobile 得分卡片
+2026-10-08T03:16:20.668Z [WARN] [task:13] pagespeed.web.dev mobile 得分等待超时，改用页面可视区域兜底截图
+2026-10-08T03:16:22.223Z [INFO] [task:13] pagespeed.web.dev mobile 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-13\pagespeed-mobile.png
+2026-10-08T03:16:37.225Z [WARN] [task:13] pagespeed.web.dev 桌面端切换按钮不可用，尝试直接打开桌面端分析页
+2026-10-08T03:16:37.797Z [INFO] [task:13] 等待 pagespeed.web.dev desktop 得分卡片
+2026-10-08T03:20:38.684Z [WARN] [task:13] pagespeed.web.dev desktop 得分等待超时，改用页面可视区域兜底截图
+2026-10-08T03:20:40.258Z [INFO] [task:13] pagespeed.web.dev desktop 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-13\pagespeed-desktop.png
+2026-10-08T03:20:40.265Z [INFO] [task:13] PageSpeed 页面截图完成
+2026-10-08T03:20:40.291Z [INFO] [task:13] 任务完成，耗时 566.9s，状态=success
+2026-10-08T06:05:48.985Z [INFO] [task:13] 补齐截图完成: {"generated":[],"existing":["mobile","desktop"],"failed":[]}
+2026-10-08T06:05:57.653Z [INFO] [task:13] 补齐截图完成: {"generated":[],"existing":["mobile","desktop"],"failed":[]}
