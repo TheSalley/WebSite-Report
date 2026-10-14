@@ -145,6 +145,7 @@ export function Dialog({
   onClose,
   title,
   children,
+  actions,
   footer,
   width = 'max-w-lg'
 }: {
@@ -152,6 +153,8 @@ export function Dialog({
   onClose: () => void
   title: string
   children: React.ReactNode
+  /** 标题栏右侧的操作区（渲染在关闭按钮之前） */
+  actions?: React.ReactNode
   footer?: React.ReactNode
   width?: string
 }) {
@@ -165,15 +168,18 @@ export function Dialog({
         aria-label={title}
         className={`relative w-full ${width} rounded-xl border border-border bg-background-elevated shadow-lg dark:border-border`}
       >
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
           <h3 className="text-base font-semibold">{title}</h3>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-foreground-subtle hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800"
-            aria-label="关闭"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {actions}
+            <button
+              onClick={onClose}
+              className="rounded p-1 text-foreground-subtle hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800"
+              aria-label="关闭"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-border px-5 py-3">{footer}</div>}

@@ -559,6 +559,25 @@ export async function listTasksRaw(limit = 100): Promise<TaskRow[]> {
     .all(limit) as unknown as TaskRow[]
 }
 
+/** 分页查询任务（按 id 倒序） */
+export async function listTasksPage(
+  page: number,
+  pageSize: number
+): Promise<{ items: TaskRow[]; total: number }> {
+  const sqlite = getDb()
+  const total = (sqlite.prepare('SELECT COUNT(*) AS c FROM tasks').get() as SqlRow).c as number
+  const items = sqlite
+    .prepare('SELECT * FROM tasks ORDER BY id DESC LIMIT ? OFFSET ?')
+    .all(pageSize, (page - 1) * pageSize) as unknown as TaskRow[]
+  return { items, total }
+}
+
+/** 全局运行中任务数量（含历史遗留 running 状态） */
+export async function countRunningTasks(): Promise<number> {
+  const row = getDb().prepare("SELECT COUNT(*) AS c FROM tasks WHERE status = 'running'").get() as SqlRow
+  return (row.c as number) ?? 0
+}
+
 export async function getTask(id: number): Promise<TaskRow | null> {
   const row = getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(id) as SqlRow | undefined
   return row ? (row as unknown as TaskRow) : null
@@ -632,6 +651,11 @@ export async function saveCheckResults(taskId: number, results: Omit<CheckResult
 
 export async function updateCheckResultNote(id: number, note: string): Promise<void> {
   getDb().prepare('UPDATE check_results SET note = ? WHERE id = ?').run(note, id)
+}
+
+/** 更新单条结果的交付成果文案（报告「交付成果」列） */
+export async function updateCheckResultDeliverable(id: number, deliverable: string): Promise<void> {
+  getDb().prepare('UPDATE check_results SET deliverable = ? WHERE id = ?').run(deliverable, id)
 }
 
 /** 更新单条结果状态（人工验收确认），返回更新后的行 */

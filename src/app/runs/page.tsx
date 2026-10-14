@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock, ImageUp, Smartphone, Monitor, ScrollText } from 'lucide-react'
+import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock, ImageUp, Smartphone, Monitor, ScrollText, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button, Card, Dialog, Input, Select, Empty, Spinner, StatusBadge } from '@/components/ui'
 import type { Task, Site, RuleSet, CheckResult } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
@@ -10,6 +10,16 @@ import { fetchJson, friendlyError } from '@/lib/client-fetch'
 type TaskRow = Task & {
   progress: { done: number; total: number; ruleKey: string; ruleName: string; status: string; error?: string } | null
 }
+
+type TaskListResponse = {
+  items: TaskRow[]
+  total: number
+  page: number
+  pageSize: number
+  running: number
+}
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50]
 
 export default function RunsPage() {
   const [tasks, setTasks] = React.useState<TaskRow[]>([])
@@ -25,23 +35,36 @@ export default function RunsPage() {
   const [results, setResults] = React.useState<CheckResult[]>([])
   const [resultsLoading, setResultsLoading] = React.useState(false)
   const [statusFilter, setStatusFilter] = React.useState('all')
-  const [noteDrafts, setNoteDrafts] = React.useState<Record<number, string>>({})
+  const [deliverableDrafts, setDeliverableDrafts] = React.useState<Record<number, string>>({})
+  const [savingDeliverables, setSavingDeliverables] = React.useState(false)
   const [shotUploading, setShotUploading] = React.useState<'' | 'mobile' | 'desktop'>('')
   const [shotVersion, setShotVersion] = React.useState(0)
   const [taskLogs, setTaskLogs] = React.useState<string[]>([])
   const [logsOpen, setLogsOpen] = React.useState(false)
   const [cancelling, setCancelling] = React.useState<number | null>(null)
+  const [page, setPage] = React.useState(1)
+  const [pageSize, setPageSize] = React.useState(10)
+  const [total, setTotal] = React.useState(0)
+  const [runningCount, setRunningCount] = React.useState(0)
   const shotFileRef = React.useRef<HTMLInputElement | null>(null)
   const shotStrategyRef = React.useRef<'mobile' | 'desktop'>('mobile')
 
   const loadAll = React.useCallback(async () => {
     try {
       const [t, s, rs] = await Promise.all([
-        fetchJson<TaskRow[]>('/api/tasks'),
+        fetchJson<TaskListResponse>(`/api/tasks?page=${page}&pageSize=${pageSize}`),
         fetchJson<Site[]>('/api/sites'),
         fetchJson<RuleSet[]>('/api/rulesets')
       ])
-      setTasks(t)
+      setTasks(t.items)
+      setTotal(t.total)
+      setRunningCount(t.running)
+      // 当前页超出总页数（如删除后）时回退到最后一页
+      const totalPages = Math.max(1, Math.ceil(t.total / pageSize))
+      if (page > totalPages && totalPages > 0) {
+        setPage(totalPages)
+        return
+      }
       setSites(s)
       setRuleSets(rs)
       setError('')
@@ -51,7 +74,7 @@ export default function RunsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [page, pageSize])
 
   React.useEffect(() => {
     let stopped = false
@@ -96,7 +119,9 @@ export default function RunsPage() {
     if (!confirm(`确认删除任务 #${id}？其全部检测结果与截图将被清除。`)) return
     await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
     if (selectedTask?.id === id) setSelectedTask(null)
-    loadAll()
+    // 当前页只剩一条时回到上一页，避免出现空页
+    if (tasks.length === 1 && page > 1) setPage((p) => p - 1)
+    else loadAll()
   }
 
   const cancelTask = async (id: number) => {
@@ -146,20 +171,29 @@ export default function RunsPage() {
     }
   }
 
-  const saveNote = async (resultId: number) => {
-    const note = noteDrafts[resultId] ?? ''
-    await fetch(`/api/tasks/${selectedTask?.id}/results/${resultId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ note })
-    })
-    setNoteDrafts((d) => {
-      const next = { ...d }
-      delete next[resultId]
-      return next
-    })
-    await reloadResults()
+  /** 批量保存所有已修改的交付成果 */
+  const saveAllDeliverables = async () => {
+    const ids = Object.keys(deliverableDrafts)
+    if (ids.length === 0 || !selectedTask) return
+    setSavingDeliverables(true)
+    try {
+      for (const id of ids) {
+        const resultId = Number(id)
+        await fetch(`/api/tasks/${selectedTask.id}/results/${resultId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deliverable: deliverableDrafts[resultId] ?? '' })
+        })
+      }
+      setDeliverableDrafts({})
+      await reloadResults()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSavingDeliverables(false)
+    }
   }
+  const hasDeliverableDrafts = Object.keys(deliverableDrafts).length > 0
 
   const updateStatus = async (resultId: number, status: string) => {
     if (!selectedTask) return
@@ -206,7 +240,7 @@ export default function RunsPage() {
   const reportUrl = selectedTask ? `/reports/${selectedTask.id}` : ''
   const filteredResults = results.filter((r) => statusFilter === 'all' || r.status === statusFilter)
 
-  const runningCount = tasks.filter((t) => t.status === 'running').length
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   const statusCounts = (key: 'pass' | 'warn' | 'fail' | 'skip' | 'verify' | 'all') => results.filter((r) => r.status === key).length
 
@@ -254,7 +288,7 @@ export default function RunsPage() {
             <div className="flex items-center gap-2 text-sm font-medium">
               <BarChart3 className="h-4 w-4 text-primary" /> 任务列表
             </div>
-            <span className="text-xs text-foreground-subtle">共 {tasks.length} 个</span>
+            <span className="text-xs text-foreground-subtle">共 {total} 个</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -323,6 +357,29 @@ export default function RunsPage() {
               </tbody>
             </table>
           </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+            <span className="text-xs text-foreground-subtle">
+              第 {page}/{totalPages} 页 · 共 {total} 个任务
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-foreground-subtle">每页</span>
+              <Select
+                value={String(pageSize)}
+                onChange={(v) => {
+                  setPageSize(Number(v))
+                  setPage(1)
+                }}
+                options={PAGE_SIZE_OPTIONS.map((n) => ({ value: String(n), label: String(n) }))}
+                className="h-8 w-[72px] text-xs"
+              />
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                <ChevronLeft className="h-3.5 w-3.5" /> 上一页
+              </Button>
+              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                下一页 <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
         </Card>
       )}
 
@@ -365,7 +422,7 @@ export default function RunsPage() {
         </div>
       </Dialog>
 
-      {/* 任务详情 */}
+      {/* 任务详情弹窗 */}
       <input
         ref={shotFileRef}
         type="file"
@@ -374,18 +431,13 @@ export default function RunsPage() {
         onChange={replaceShot}
       />
       {selectedTask && (
-        <Card className="mt-6 overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-zinc-50/50 px-5 py-4 dark:bg-zinc-800/20">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold">任务 #{selectedTask.id} · {selectedTask.site?.name}</h2>
-                <StatusBadge status={selectedTask.status} />
-              </div>
-              <div className="text-xs text-foreground-subtle">
-                {selectedTask.site?.url} · {selectedTask.ruleSet?.name}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
+        <Dialog
+          open
+          onClose={() => setSelectedTask(null)}
+          title={`任务 #${selectedTask.id}${selectedTask.site?.name ? ' · ' + selectedTask.site.name : ''}`}
+          width="max-w-4xl"
+          actions={
+            <>
               {selectedTask.status === 'success' && (
                 <Link href={reportUrl} target="_blank">
                   <Button variant="outline" size="sm">
@@ -401,13 +453,23 @@ export default function RunsPage() {
               <Button variant="outline" size="sm" onClick={() => loadTaskLogs(selectedTask.id)}>
                 <ScrollText className="h-3.5 w-3.5" /> 查看日志
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedTask(null)}>
-                关闭
-              </Button>
-            </div>
+              {hasDeliverableDrafts && (
+                <Button size="sm" onClick={() => saveAllDeliverables()} disabled={savingDeliverables}>
+                  {savingDeliverables && <Spinner />} 保存修改
+                </Button>
+              )}
+            </>
+          }
+        >
+          <div className="flex flex-wrap items-center gap-2 pb-2 text-xs text-foreground-subtle">
+            <StatusBadge status={selectedTask.status} />
+            <span className="text-foreground-muted">{selectedTask.site?.url}</span>
+            <span>·</span>
+            <span>{selectedTask.ruleSet?.name}</span>
           </div>
+          <div className="mb-4 h-px bg-border" />
 
-          <div className="px-5 py-4">
+          <div>
             {/* 概览条 */}
             {!resultsLoading && results.length > 0 && (
               <div className="mb-5 flex flex-wrap items-center gap-6 rounded-xl border border-border bg-background p-4">
@@ -538,17 +600,14 @@ export default function RunsPage() {
                           <dd className="min-w-0 break-all">{r.description}</dd>
                         </div>
                       </dl>
-                      {(r.note || selectedTask.status === 'success') && (
-                        <div className="mt-3 flex gap-2">
+                      {(r.deliverable || selectedTask.status === 'success') && (
+                        <div className="mt-3">
                           <Input
-                            placeholder="人工复核备注…"
-                            value={noteDrafts[r.id] ?? r.note}
-                            onChange={(e) => setNoteDrafts((d) => ({ ...d, [r.id]: e.target.value }))}
-                            className="h-8 text-xs"
+                            placeholder="自定义交付成果（留空则沿用预设文案）…"
+                            value={deliverableDrafts[r.id] ?? r.deliverable ?? ''}
+                            onChange={(e) => setDeliverableDrafts((d) => ({ ...d, [r.id]: e.target.value }))}
+                            className="h-8 w-full text-xs"
                           />
-                          <Button size="sm" variant="outline" onClick={() => saveNote(r.id)}>
-                            保存
-                          </Button>
                         </div>
                       )}
                     </div>
@@ -557,7 +616,7 @@ export default function RunsPage() {
               </>
             )}
           </div>
-        </Card>
+        </Dialog>
       )}
 
       {/* 任务日志弹窗 */}

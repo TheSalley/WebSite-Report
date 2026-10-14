@@ -294,7 +294,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .header { text-align: center; background: #fff; border-radius: 14px; border-top: 4px solid #2563eb; padding: 26px 28px 24px; box-shadow: 0 2px 12px rgba(37,99,235,.06); margin-bottom: 26px; }
   .header h1 { font-size: 24px; letter-spacing: 3px; color: #1e293b; }
   .header .company { margin-top: 6px; font-size: 13px; color: #2563eb; font-weight: 600; }
-  .header .doc-no { margin-top: 8px; font-size: 12px; color: #64748b; }
 
   h2.section-title { font-size: 15px; font-weight: 700; color: #1e293b; border-left: 4px solid #2563eb; padding-left: 10px; margin: 26px 0 12px; letter-spacing: .5px; }
 
@@ -356,7 +355,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     ${logoDataUrl ? `<img src="${logoDataUrl}" alt="logo" style="display:block;height:44px;margin:0 auto 10px;object-fit:contain;" />` : ''}
     <h1>${escapeHtml(settings.reportTitle || '网站合规性检测报告')}</h1>
     ${settings.companyName ? `<div class="company">${escapeHtml(settings.companyName)}</div>` : ''}
-    <div class="doc-no">报告编号：WEB-REPORT-${String(task.id).padStart(4, '0')}　　生成日期：${escapeHtml(generatedAt)}</div>
   </div>
 
   <h2 class="section-title">一、基本信息</h2>
@@ -366,12 +364,8 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
       <td class="label">检测网址</td><td class="value">${escapeHtml(site.url)}</td>
     </tr>
     <tr>
-      <td class="label">规则集</td><td class="value">${escapeHtml(ruleSet.name)}</td>
-      <td class="label">任务编号</td><td class="value">#${task.id}</td>
-    </tr>
-    <tr>
-      <td class="label">检测时间</td><td class="value">${escapeHtml(formatDateTime(task.startedAt))}</td>
-      <td class="label">完成时间</td><td class="value">${escapeHtml(formatDateTime(task.finishedAt))}</td>
+      <td class="label">报告编号</td><td class="value">WEB-REPORT-${String(task.id).padStart(4, '0')}</td>
+      <td class="label">生成日期</td><td class="value">${escapeHtml(formatDateTime(generatedAt))}</td>
     </tr>
   </table>
 

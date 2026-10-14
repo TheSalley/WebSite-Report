@@ -1,13 +1,22 @@
 import { NextResponse } from 'next/server'
-import { listTasksRaw, getSite, getRuleSet } from '@/lib/store'
+import { listTasksPage, countRunningTasks, getSite, getRuleSet } from '@/lib/store'
 import { startTask, getRunningState } from '@/lib/task-service'
 
-async function decorateTasks() {
-  const tasks = await listTasksRaw(100)
-  const sites = new Map((await Promise.all(tasks.map((t) => getSite(t.siteId)))).map((s, i) => [tasks[i].siteId, s]))
-  const sets = new Map((await Promise.all(tasks.map((t) => getRuleSet(t.ruleSetId)))).map((s, i) => [tasks[i].ruleSetId, s]))
-  return tasks.map((t) => {
-    const running = getRunningState(t.id)
+const MAX_PAGE_SIZE = 50
+
+export async function GET(request: Request) {
+  const url = new URL(request.url)
+  const page = Math.max(1, Number(url.searchParams.get('page')) || 1)
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(url.searchParams.get('pageSize')) || 10))
+
+  const { items, total } = await listTasksPage(page, pageSize)
+  const running = await countRunningTasks()
+
+  const sites = new Map((await Promise.all(items.map((t) => getSite(t.siteId)))).map((s, i) => [items[i].siteId, s]))
+  const sets = new Map((await Promise.all(items.map((t) => getRuleSet(t.ruleSetId)))).map((s, i) => [items[i].ruleSetId, s]))
+
+  const list = items.map((t) => {
+    const run = getRunningState(t.id)
     return {
       id: t.id,
       siteId: t.siteId,
@@ -25,15 +34,13 @@ async function decorateTasks() {
       pagespeed: t.pagespeedJson ? JSON.parse(t.pagespeedJson) : null,
       site: sites.get(t.siteId) ?? null,
       ruleSet: sets.get(t.ruleSetId) ?? null,
-      progress: running
-        ? { done: running.done, total: running.total, ruleKey: running.currentRuleKey, ruleName: running.currentRuleName, status: running.lastStatus }
+      progress: run
+        ? { done: run.done, total: run.total, ruleKey: run.currentRuleKey, ruleName: run.currentRuleName, status: run.lastStatus }
         : null
     }
   })
-}
 
-export async function GET() {
-  return NextResponse.json(await decorateTasks())
+  return NextResponse.json({ items: list, total, page, pageSize, running })
 }
 
 export async function POST(request: Request) {

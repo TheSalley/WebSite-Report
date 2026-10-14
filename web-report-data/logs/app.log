@@ -331,3 +331,77 @@
 2026-10-08T08:22:05.795Z [INFO] [task:20] pagespeed.web.dev desktop 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-20\pagespeed-desktop.png
 2026-10-08T08:22:05.800Z [INFO] [task:20] PageSpeed 页面截图完成
 2026-10-08T08:22:05.825Z [INFO] [task:20] 任务完成，耗时 139.3s，状态=success
+2026-10-14T08:25:47.656Z [INFO] [task:21] 任务创建，site=公司官网 ruleset=建站服务合同验收 共25条规则
+2026-10-14T08:25:47.657Z [INFO] [task:21] 开始检测任务 taskId=21 url=https://en.yeehaiglobal.com/ 启用规则数=25
+2026-10-14T08:25:53.463Z [INFO] [task:21] 执行规则 verify.plan.strategy（网站建设规划）
+2026-10-14T08:25:53.464Z [INFO] [task:21] 执行规则 verify.plan.style（精选样式库）
+2026-10-14T08:25:53.464Z [INFO] [task:21] 执行规则 verify.build.banner（Banner 创意设计(3 张)）
+2026-10-14T08:25:53.464Z [INFO] [task:21] 执行规则 verify.build.pages（常规页面搭建）
+2026-10-14T08:25:53.464Z [INFO] [task:21] 执行规则 content.viewport（响应式设计（移动端 viewport 正确））
+2026-10-14T08:25:53.465Z [INFO] [task:21] 执行规则 contract.contact（多转化入口）
+2026-10-14T08:25:53.465Z [INFO] [task:21] 执行规则 contract.search（全站搜索功能）
+2026-10-14T08:25:53.465Z [INFO] [task:21] 执行规则 compliance.privacy（隐私政策页）
+2026-10-14T08:25:53.466Z [INFO] [task:21] 执行规则 contract.gtranslate（Google 翻译插件）
+2026-10-14T08:25:55.152Z [INFO] [task:21] 执行规则 verify.build.thanks（感谢页跳转跟踪）
+2026-10-14T08:25:55.153Z [INFO] [task:21] 执行规则 contract.ga（GA 预埋）
+2026-10-14T08:25:55.153Z [INFO] [task:21] 执行规则 security.https（HTTPS 安全证书部署）
+2026-10-14T08:25:55.154Z [INFO] [task:21] 执行规则 verify.optimize.html（HTML 优化）
+2026-10-14T08:25:55.154Z [INFO] [task:21] 执行规则 verify.optimize.server（基础AWS 海外服务器）
+2026-10-14T08:25:55.154Z [INFO] [task:21] 执行规则 verify.optimize.firewall（免费版防火墙）
+2026-10-14T08:25:55.154Z [INFO] [task:21] 执行规则 verify.optimize.cdn（安全与CDN 加速服务）
+2026-10-14T08:25:55.154Z [INFO] [task:21] 执行规则 verify.admin.news（新闻管理）
+2026-10-14T08:25:55.155Z [INFO] [task:21] 执行规则 verify.admin.product（产品管理）
+2026-10-14T08:25:55.155Z [INFO] [task:21] 执行规则 verify.admin.files（多格式文件管理）
+2026-10-14T08:25:55.155Z [INFO] [task:21] 执行规则 verify.admin.youtube（YouTube 视频嵌入）
+2026-10-14T08:25:55.155Z [INFO] [task:21] 执行规则 verify.admin.mail（询盘管理）
+2026-10-14T08:25:55.156Z [INFO] [task:21] 执行规则 verify.admin.onboard（Onboard 智慧网站解决方案）
+2026-10-14T08:25:55.156Z [INFO] [task:21] 执行规则 verify.content.fill（图文填充）
+2026-10-14T08:25:55.156Z [INFO] [task:21] 执行规则 verify.content.product（产品代上传）
+2026-10-14T08:25:55.156Z [INFO] [task:21] 执行规则 verify.content.blog（新闻代上传）
+2026-10-14T08:25:55.157Z [INFO] [task:21] 检测完成，规则结果数=25
+2026-10-14T08:25:55.208Z [INFO] [task:21] 开始采集 PageSpeed 评分与截图
+2026-10-14T08:26:46.448Z [INFO] [task:21] PageSpeed 评分采集完成
+2026-10-14T08:26:48.633Z [INFO] [task:21] 等待 pagespeed.web.dev mobile 得分卡片
+2026-10-14T08:27:26.365Z [INFO] [task:21] pagespeed.web.dev mobile 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-21\pagespeed-mobile.png
+2026-10-14T08:27:26.460Z [INFO] [task:21] pagespeed.web.dev 已切换桌面设备
+2026-10-14T08:27:26.460Z [INFO] [task:21] 等待 pagespeed.web.dev desktop 得分卡片
+2026-10-14T08:27:31.076Z [INFO] [task:21] pagespeed.web.dev desktop 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-21\pagespeed-desktop.png
+2026-10-14T08:27:31.082Z [INFO] [task:21] PageSpeed 页面截图完成
+2026-10-14T08:27:31.110Z [INFO] [task:21] 任务完成，耗时 103.5s，状态=success
+2026-10-14T08:41:44.962Z [INFO] [task:22] 任务创建，site=凯乐士 ruleset=建站服务合同验收 共25条规则
+2026-10-14T08:41:44.963Z [INFO] [task:22] 开始检测任务 taskId=22 url=https://en.galaxis-tech.com/ 启用规则数=25
+2026-10-14T08:41:50.063Z [INFO] [task:22] 执行规则 verify.plan.strategy（网站建设规划）
+2026-10-14T08:41:50.064Z [INFO] [task:22] 执行规则 verify.plan.style（精选样式库）
+2026-10-14T08:41:50.064Z [INFO] [task:22] 执行规则 verify.build.banner（Banner 创意设计(3 张)）
+2026-10-14T08:41:50.064Z [INFO] [task:22] 执行规则 verify.build.pages（常规页面搭建）
+2026-10-14T08:41:50.064Z [INFO] [task:22] 执行规则 content.viewport（响应式设计（移动端 viewport 正确））
+2026-10-14T08:41:50.065Z [INFO] [task:22] 执行规则 contract.contact（多转化入口）
+2026-10-14T08:41:50.066Z [INFO] [task:22] 执行规则 contract.search（全站搜索功能）
+2026-10-14T08:41:50.066Z [INFO] [task:22] 执行规则 compliance.privacy（隐私政策页）
+2026-10-14T08:41:50.066Z [INFO] [task:22] 执行规则 contract.gtranslate（Google 翻译插件）
+2026-10-14T08:41:50.464Z [INFO] [task:22] 执行规则 verify.build.thanks（感谢页跳转跟踪）
+2026-10-14T08:41:50.464Z [INFO] [task:22] 执行规则 contract.ga（GA 预埋）
+2026-10-14T08:41:50.464Z [INFO] [task:22] 执行规则 security.https（HTTPS 安全证书部署）
+2026-10-14T08:41:50.464Z [INFO] [task:22] 执行规则 verify.optimize.html（HTML 优化）
+2026-10-14T08:41:50.465Z [INFO] [task:22] 执行规则 verify.optimize.server（基础AWS 海外服务器）
+2026-10-14T08:41:50.465Z [INFO] [task:22] 执行规则 verify.optimize.firewall（免费版防火墙）
+2026-10-14T08:41:50.465Z [INFO] [task:22] 执行规则 verify.optimize.cdn（安全与CDN 加速服务）
+2026-10-14T08:41:50.465Z [INFO] [task:22] 执行规则 verify.admin.news（新闻管理）
+2026-10-14T08:41:50.466Z [INFO] [task:22] 执行规则 verify.admin.product（产品管理）
+2026-10-14T08:41:50.466Z [INFO] [task:22] 执行规则 verify.admin.files（多格式文件管理）
+2026-10-14T08:41:50.466Z [INFO] [task:22] 执行规则 verify.admin.youtube（YouTube 视频嵌入）
+2026-10-14T08:41:50.466Z [INFO] [task:22] 执行规则 verify.admin.mail（询盘管理）
+2026-10-14T08:41:50.466Z [INFO] [task:22] 执行规则 verify.admin.onboard（Onboard 智慧网站解决方案）
+2026-10-14T08:41:50.467Z [INFO] [task:22] 执行规则 verify.content.fill（图文填充）
+2026-10-14T08:41:50.467Z [INFO] [task:22] 执行规则 verify.content.product（产品代上传）
+2026-10-14T08:41:50.467Z [INFO] [task:22] 执行规则 verify.content.blog（新闻代上传）
+2026-10-14T08:41:50.467Z [INFO] [task:22] 检测完成，规则结果数=25
+2026-10-14T08:41:50.532Z [INFO] [task:22] 开始采集 PageSpeed 评分与截图
+2026-10-14T08:42:36.063Z [INFO] [task:22] PageSpeed 评分采集完成
+2026-10-14T08:42:37.964Z [INFO] [task:22] 等待 pagespeed.web.dev mobile 得分卡片
+2026-10-14T08:43:21.717Z [INFO] [task:22] pagespeed.web.dev mobile 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-22\pagespeed-mobile.png
+2026-10-14T08:43:21.839Z [INFO] [task:22] pagespeed.web.dev 已切换桌面设备
+2026-10-14T08:43:21.840Z [INFO] [task:22] 等待 pagespeed.web.dev desktop 得分卡片
+2026-10-14T08:43:23.423Z [INFO] [task:22] pagespeed.web.dev desktop 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-22\pagespeed-desktop.png
+2026-10-14T08:43:23.427Z [INFO] [task:22] PageSpeed 页面截图完成
+2026-10-14T08:43:23.444Z [INFO] [task:22] 任务完成，耗时 98.5s，状态=success

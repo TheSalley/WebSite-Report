@@ -16,6 +16,7 @@ import {
   updateTask,
   saveCheckResults,
   updateCheckResultNote,
+  updateCheckResultDeliverable,
   updateCheckResultStatus,
   listCheckResults,
   deleteTask
@@ -213,6 +214,11 @@ export async function removeTask(taskId: number): Promise<void> {
 
 export async function updateNote(resultId: number, note: string): Promise<void> {
   await updateCheckResultNote(resultId, note)
+}
+
+/** 人工填写交付成果：写入结果的 deliverable 列 */
+export async function updateDeliverable(resultId: number, deliverable: string): Promise<void> {
+  await updateCheckResultDeliverable(resultId, deliverable)
 }
 
 /** 人工验收：更新结果状态并重算所属任务的得分与统计 */
