@@ -37,10 +37,10 @@ npm run build
 ### 2. 启动服务
 
 ```bash
-bash start.sh       # 自动 export PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright 后 npm start
+npx next start -p 3010     # 直接启动，浏览器路径由代码自动探测，无需手动设置环境变量
 ```
 
-宝塔面板请在「项目设置 → 启动命令」填写：`bash /www/wwwroot/WEBSITE_REPORT/start.sh`（路径按实际项目目录）。用 pm2 亦可：`PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright pm2 start npm --name realsite -- start`。
+宝塔面板请在「项目设置 → 启动命令」填写：`npx next start -p 3010`（路径按实际项目目录，端口按需修改）。用 pm2 亦可：`pm2 start npm --name realsite -- run start -- -p 3010`。
 
 > 如果服务器无 apt（CentOS/yum），手动执行 `npx playwright install-deps chromium`、`npx playwright install chromium`，并把 `/root/.cache/ms-playwright`（或对应 `$HOME/.cache`）复制到 `/opt/ms-playwright` 后 `chmod -R a+rX /opt/ms-playwright`。
 

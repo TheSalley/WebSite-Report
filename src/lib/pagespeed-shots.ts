@@ -132,10 +132,14 @@ export async function capturePagespeedShots(
 
     // 移动端：打开默认分析页（自动触发移动端测速）
     throwIfCancelled(signal)
-    await page
-      .goto(baseTarget, { waitUntil: 'domcontentloaded', timeout: 60000 })
-      .catch((e) => logWarn(`打开 pagespeed.web.dev 失败：${(e as Error).message}`, taskId))
-    if (!signal?.cancelled) {
+    let webDevOpened = false
+    try {
+      await page.goto(baseTarget, { waitUntil: 'domcontentloaded', timeout: 30000 })
+      webDevOpened = true
+    } catch (e) {
+      logWarn(`打开 pagespeed.web.dev 失败（${(e as Error).message.split('\n')[0]}），跳过 web.dev 截图，改用本地评分数据渲染`, taskId)
+    }
+    if (webDevOpened && !signal?.cancelled) {
       try {
         const cookieBtn = page.getByText('知道了', { exact: true })
         if (await cookieBtn.isVisible({ timeout: 3000 })) await cookieBtn.click()
@@ -146,7 +150,7 @@ export async function capturePagespeedShots(
     }
 
     // 桌面端：优先点击「桌面设备」按钮，按钮不可用时直接打开 desktop URL 兜底
-    if (!signal?.cancelled) {
+    if (webDevOpened && !signal?.cancelled) {
       let desktopOpened = false
       try {
         const desktopBtn = page.getByText('桌面设备', { exact: true }).first()
@@ -160,7 +164,7 @@ export async function capturePagespeedShots(
         throwIfCancelled(signal)
         try {
           await page
-            .goto(baseTarget + '&strategy=desktop', { waitUntil: 'domcontentloaded', timeout: 60000 })
+            .goto(baseTarget + '&strategy=desktop', { waitUntil: 'domcontentloaded', timeout: 30000 })
             .catch(() => undefined)
         } catch {
           /* 忽略 */

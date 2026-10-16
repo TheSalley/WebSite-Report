@@ -3,6 +3,9 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { chromium } from 'playwright'
+import { ensurePlaywrightBrowsersPath } from './playwright-path'
+
+ensurePlaywrightBrowsersPath()
 import { getSettings } from '../store'
 import type { PageSpeedReportData, PageSpeedStrategyResult } from '../types'
 
@@ -126,7 +129,7 @@ function cleanupLhBrowser(): void {
 }
 
 /** 等待 DevToolsActivePort 文件出现并返回端口 */
-async function waitForDevToolsPort(profileDir: string, timeoutMs = 20_000): Promise<number> {
+async function waitForDevToolsPort(profileDir: string, timeoutMs = 30_000): Promise<number> {
   const portFile = join(profileDir, 'DevToolsActivePort')
   const t0 = Date.now()
   while (Date.now() - t0 < timeoutMs) {
@@ -149,6 +152,7 @@ async function launchLhBrowser(): Promise<{ port: number; done: () => void }> {
   const chromePath = chromium.executablePath()
   if (!chromePath) throw new Error('未找到可用的 Chromium 可执行文件')
   const profileDir = mkdtempSync(join(tmpdir(), 'lh-profile-'))
+  const errChunks: Buffer[] = []
   const proc = spawn(
     chromePath,
     [
@@ -157,15 +161,48 @@ async function launchLhBrowser(): Promise<{ port: number; done: () => void }> {
       '--remote-debugging-port=0',
       '--disable-gpu',
       '--disable-dev-shm-usage',
+      // 与 Playwright chrome-launcher 一致：关闭 crashpad/首跑检查/扩展等。
+      // www 等受限用户下不加这些参数，crashpad_handler 崩溃会导致 Chrome 启动失败
+      '--disable-breakpad',
+      '--no-first-run',
+      '--disable-default-apps',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-sync',
+      '--metrics-recording-only',
+      '--password-store=basic',
       `--user-data-dir=${profileDir}`,
       'about:blank'
     ],
-    { stdio: 'ignore', windowsHide: true }
+    {
+      stdio: ['ignore', 'ignore', 'pipe'],
+      windowsHide: true,
+      env: { ...process.env, HOME: process.env.HOME || tmpdir() }
+    }
   )
+  proc.stderr?.on('data', (d: Buffer) => {
+    errChunks.push(d)
+    if (errChunks.join('').length > 2000) errChunks.shift()
+  })
   lhBrowserProc = proc
   lhProfileDir = profileDir
 
-  const port = await waitForDevToolsPort(profileDir)
+  const stderrHint = () => {
+    const err = errChunks.join('').trim()
+    return err ? '（Chrome 输出：' + err.split('\n').slice(0, 6).join(' | ') + '）' : ''
+  }
+
+  const portFromStderr = (): number | null => {
+    const m = errChunks.join('').match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//)
+    return m ? Number(m[1]) : null
+  }
+  const port = await waitForDevToolsPort(profileDir).catch((e) => {
+    // DevToolsActivePort 文件未生成时，尝试从 Chrome stderr 解析调试端口
+    const p = portFromStderr()
+    if (p) return p
+    // 进程可能因缺系统库立即退出，把 stderr 附带到错误信息，便于线上排查
+    throw new Error(e.message + stderrHint())
+  })
   // 等 CDP 可用
   for (let i = 0; i < 30; i++) {
     try {
@@ -175,6 +212,9 @@ async function launchLhBrowser(): Promise<{ port: number; done: () => void }> {
       /* 未就绪 */
     }
     await new Promise((r) => setTimeout(r, 300))
+  }
+  if (proc.exitCode !== null) {
+    throw new Error('Lighthouse 浏览器进程已退出（exit=' + proc.exitCode + '）' + stderrHint())
   }
   return { port, done: cleanupLhBrowser }
 }

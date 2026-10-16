@@ -1,4 +1,8 @@
 import { chromium, type Browser, type Page } from 'playwright'
+import { ensurePlaywrightBrowsersPath } from './playwright-path'
+
+// 启动前自动探测浏览器目录（服务器非 root 用户运行 npx next start 也可直接使用）
+ensurePlaywrightBrowsersPath()
 
 let browser: Browser | null = null
 

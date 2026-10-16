@@ -16,4 +16,4 @@ echo "[3/3] 复制浏览器到公共目录并开放权限..."
 mkdir -p /opt/ms-playwright
 cp -r /root/.cache/ms-playwright/* /opt/ms-playwright/ 2>/dev/null   || cp -r "$HOME/.cache/ms-playwright"/* /opt/ms-playwright/ 2>/dev/null   || { echo "未找到浏览器缓存目录，请检查上一步输出"; exit 1; }
 chmod -R a+rX /opt/ms-playwright
-echo "完成。现在用 start.sh 启动服务即可。"
+echo "完成。浏览器已就绪，直接 npx next start 启动服务即可。"
