@@ -20,21 +20,29 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-检测引擎依赖 Playwright Chromium，需先安装浏览器（首次可执行 `npx playwright install chromium`）。数据默认存储于项目根 `web-report-data/`（JSON 文件），可用环境变量 `WEBREPORT_DATA_DIR` 覆盖。
+检测引擎依赖 Playwright Chromium，需先安装浏览器（首次可执行 `npx playwright install chromium`）。数据默认存储于项目根 `web-report-data/`（SQLite 数据库 `realsite.db`），可用环境变量 `WEBREPORT_DATA_DIR` 覆盖。
 
 ## 服务器部署（Linux）
 
-检测引擎依赖 Playwright Chromium，服务器上除安装 Node 外还需安装 Chromium 系统依赖：
+项目内置两个部署脚本，适配宝塔/www 等非 root 运行场景（浏览器装在 root 目录时 www 用户读不到，必须放到公共目录并指定 `PLAYWRIGHT_BROWSERS_PATH`）：
+
+### 1. 首次部署 / 更新依赖
 
 ```bash
-# 1. 安装 Playwright + Chromium
 npm ci
-npx playwright install chromium --with-deps   # --with-deps 会自动安装系统依赖库
-
-# 2. 构建并启动（建议用 pm2 守护）
+bash install.sh     # root 执行：修 apt → 装系统依赖 → 下载 Chromium（失败自动换国内镜像）→ 复制到 /opt/ms-playwright
 npm run build
-npx pm2 start npm --name realsite -- start
 ```
+
+### 2. 启动服务
+
+```bash
+bash start.sh       # 自动 export PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright 后 npm start
+```
+
+宝塔面板请在「项目设置 → 启动命令」填写：`bash /www/wwwroot/WEBSITE_REPORT/start.sh`（路径按实际项目目录）。用 pm2 亦可：`PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright pm2 start npm --name realsite -- start`。
+
+> 如果服务器无 apt（CentOS/yum），手动执行 `npx playwright install-deps chromium`、`npx playwright install chromium`，并把 `/root/.cache/ms-playwright`（或对应 `$HOME/.cache`）复制到 `/opt/ms-playwright` 后 `chmod -R a+rX /opt/ms-playwright`。
 
 > 若无法使用 `--with-deps`（无 root/受限环境），可手动安装常用依赖：
 > `apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2`
@@ -51,6 +59,7 @@ npx pm2 start npm --name realsite -- start
 ### 环境变量
 
 - `WEBREPORT_DATA_DIR`：数据目录（默认 `web-report-data/`），多实例部署时需指向共享目录。
+- `PLAYWRIGHT_BROWSERS_PATH`：Playwright 浏览器目录（部署脚本已固定为 `/opt/ms-playwright`），非 root 用户运行时必须设置，否则报 `Executable doesn't exist`。
 - `report.psiApiKey`：可在「报告设置」页面配置 Google PSI API Key，避免使用本地 Lighthouse。
 
 ## 常用命令
@@ -78,7 +87,7 @@ src/
     ├── engine/              # 检测引擎：browser / network-collector / snapshot / scoring / pagespeed
     │   └── rules/           # 25 条规则实现（SEO/性能/安全/内容/合规）
     ├── report/              # 报告生成（内联样式 HTML，可打印）
-    ├── store.ts             # JSON 文件数据层（串行原子写）
+    ├── store.ts             # SQLite 数据层（node:sqlite，零额外依赖）
     ├── seed.ts              # 内置规则集种子
     ├── task-service.ts      # 后台任务调度（内存进度 + 持久化）
     ├── settings.ts / init.ts
@@ -87,7 +96,7 @@ src/
 
 ## 已知限制
 
-- 本地 SQLite 存储（Node 内置 ode:sqlite，零额外依赖），适合单机/小团队；多用户并发可换 Postgres
+- 本地 SQLite 存储（Node 内置 node:sqlite，零额外依赖），适合单机/小团队；多用户并发可换 Postgres
 - PageSpeed 本地 Lighthouse 只支持 Node 运行环境，Serverless 部署需改用纯 PSI API
 - 批量检测暂为单任务逐个执行；周期巡检、账号体系为二期方向
 
