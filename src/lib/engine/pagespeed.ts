@@ -1,8 +1,6 @@
-import { spawn, type ChildProcess } from 'child_process'
-import { mkdtempSync, readFileSync, rmSync, existsSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { createServer } from 'net'
 import { ensurePlaywrightBrowsersPath } from './playwright-path'
+import type { Browser } from 'playwright'
 
 ensurePlaywrightBrowsersPath()
 import { getSettings } from '../store'
@@ -101,129 +99,68 @@ async function fetchViaPsiApi(url: string, apiKey: string): Promise<PageSpeedStr
   return [mobile, desktop]
 }
 
-/** 拉起的独立 Lighthouse 浏览器进程（用于清理） */
-let lhBrowserProc: ChildProcess | null = null
-let lhProfileDir: string | null = null
+/** 找一个空闲 TCP 端口用于 Chrome 调试 */
+function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer()
+    server.once('error', reject)
+    server.listen(0, () => {
+      const addr = server.address()
+      const port = typeof addr === 'object' && addr !== null ? addr.port : 0
+      server.close(() => resolve(port))
+    })
+  })
+}
 
-/** 清理 Lighthouse 专用浏览器进程与临时目录 */
-function cleanupLhBrowser(): void {
-  if (lhBrowserProc) {
-    try {
-      lhBrowserProc.kill()
-    } catch {
-      /* 忽略 */
-    }
-    lhBrowserProc = null
-  }
-  if (lhProfileDir) {
-    setTimeout(() => {
-      try {
-        rmSync(lhProfileDir!, { recursive: true, force: true, maxRetries: 5 })
-      } catch {
-        /* 忽略 */
-      }
-      lhProfileDir = null
-    }, 500)
+/** 拉起的 Lighthouse 专用浏览器实例（用于清理） */
+let lhBrowser: Browser | null = null
+
+/** 清理 Lighthouse 专用浏览器 */
+async function cleanupLhBrowser(): Promise<void> {
+  if (lhBrowser) {
+    await lhBrowser.close().catch(() => undefined)
+    lhBrowser = null
   }
 }
 
-/** 等待 DevToolsActivePort 文件出现并返回端口 */
-async function waitForDevToolsPort(profileDir: string, timeoutMs = 30_000): Promise<number> {
-  const portFile = join(profileDir, 'DevToolsActivePort')
-  const t0 = Date.now()
-  while (Date.now() - t0 < timeoutMs) {
-    try {
-      if (existsSync(portFile)) {
-        const content = readFileSync(portFile, 'utf8').split('\n')
-        const port = parseInt(content[0]?.trim() ?? '', 10)
-        if (port > 0) return port
-      }
-    } catch {
-      /* 文件可能正在写 */
-    }
-    await new Promise((r) => setTimeout(r, 200))
-  }
-  throw new Error('无法获取浏览器调试端口')
-}
-
-/** 拉一个独立的 headless Chromium 供 Lighthouse 使用（复用 Playwright 浏览器可执行文件） */
-async function getLhChromium(): Promise<typeof import('playwright')['chromium']> {
-  // playwright 在模块加载时读取 PLAYWRIGHT_BROWSERS_PATH 并固定浏览器目录，
-  // 因此必须先探测路径（ensurePlaywrightBrowsersPath 在模块顶部已调用），
-  // 再动态导入 playwright 保证路径生效
-  return (await import('playwright')).chromium
-}
-
-async function launchLhBrowser(): Promise<{ port: number; done: () => void }> {
-  const chromium = await getLhChromium()
-  const chromePath = chromium.executablePath()
-  if (!chromePath) throw new Error('未找到可用的 Chromium 可执行文件')
-  const profileDir = mkdtempSync(join(tmpdir(), 'lh-profile-'))
-  const errChunks: Buffer[] = []
-  const proc = spawn(
-    chromePath,
-    [
+/**
+ * 用 Playwright 启动 headless Chromium 供 Lighthouse 使用。
+ *
+ * 之前用裸 spawn 启动 Chrome，在 www 等受限用户下 crashpad 崩溃导致
+ * “无法获取浏览器调试端口”；Playwright 自带完整启动参数（已验证可正常启动），
+ * 这里直接复用 Playwright launch，并通过固定 CDP 端口让 Lighthouse 连接。
+ */
+async function launchLhBrowser(): Promise<{ port: number; done: () => Promise<void> }> {
+  const port = await getFreePort()
+  const chromium = (await import('playwright')).chromium
+  const browser = await chromium.launch({
+    headless: true,
+    args: [
       '--no-sandbox',
-      '--headless=new',
-      '--remote-debugging-port=0',
-      '--disable-gpu',
+      '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      // 与 Playwright chrome-launcher 一致：关闭 crashpad/首跑检查/扩展等。
-      // www 等受限用户下不加这些参数，crashpad_handler 崩溃会导致 Chrome 启动失败
-      '--disable-breakpad',
-      '--no-first-run',
-      '--disable-default-apps',
+      '--disable-gpu',
       '--disable-extensions',
       '--disable-background-networking',
-      '--disable-sync',
-      '--metrics-recording-only',
-      '--password-store=basic',
-      `--user-data-dir=${profileDir}`,
-      'about:blank'
-    ],
-    {
-      stdio: ['ignore', 'ignore', 'pipe'],
-      windowsHide: true,
-      env: { ...process.env, HOME: process.env.HOME || tmpdir() }
-    }
-  )
-  proc.stderr?.on('data', (d: Buffer) => {
-    errChunks.push(d)
-    if (errChunks.join('').length > 2000) errChunks.shift()
+      '--disable-default-apps',
+      `--remote-debugging-port=${port}`
+    ]
   })
-  lhBrowserProc = proc
-  lhProfileDir = profileDir
+  lhBrowser = browser
 
-  const stderrHint = () => {
-    const err = errChunks.join('').trim()
-    return err ? '（Chrome 输出：' + err.split('\n').slice(0, 6).join(' | ') + '）' : ''
-  }
-
-  const portFromStderr = (): number | null => {
-    const m = errChunks.join('').match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//)
-    return m ? Number(m[1]) : null
-  }
-  const port = await waitForDevToolsPort(profileDir).catch((e) => {
-    // DevToolsActivePort 文件未生成时，尝试从 Chrome stderr 解析调试端口
-    const p = portFromStderr()
-    if (p) return p
-    // 进程可能因缺系统库立即退出，把 stderr 附带到错误信息，便于线上排查
-    throw new Error(e.message + stderrHint())
-  })
-  // 等 CDP 可用
-  for (let i = 0; i < 30; i++) {
+  // 等待 CDP 可用（固定端口已知，轮询 /json/version）
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
     try {
       const r = await fetch(`http://127.0.0.1:${port}/json/version`)
-      if (r.ok) break
+      if (r.ok) return { port, done: cleanupLhBrowser }
     } catch {
-      /* 未就绪 */
+      /* 未就绪，继续等 */
     }
     await new Promise((r) => setTimeout(r, 300))
   }
-  if (proc.exitCode !== null) {
-    throw new Error('Lighthouse 浏览器进程已退出（exit=' + proc.exitCode + '）' + stderrHint())
-  }
-  return { port, done: cleanupLhBrowser }
+  await cleanupLhBrowser().catch(() => undefined)
+  throw new Error('无法获取浏览器调试端口')
 }
 
 /**
@@ -261,7 +198,7 @@ async function fetchViaLocalLighthouse(url: string): Promise<PageSpeedStrategyRe
       }
     }
   } finally {
-    done()
+    await done()
   }
   return results
 }
@@ -298,7 +235,7 @@ export async function fetchPageSpeed(url: string): Promise<PageSpeedReportData> 
 
 /** 清理 Lighthouse 残留进程 */
 export function shutdownPagespeed(): void {
-  cleanupLhBrowser()
+  void cleanupLhBrowser()
 }
 
 
