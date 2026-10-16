@@ -2,7 +2,6 @@ import { spawn, type ChildProcess } from 'child_process'
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { chromium } from 'playwright'
 import { ensurePlaywrightBrowsersPath } from './playwright-path'
 
 ensurePlaywrightBrowsersPath()
@@ -148,7 +147,15 @@ async function waitForDevToolsPort(profileDir: string, timeoutMs = 30_000): Prom
 }
 
 /** 拉一个独立的 headless Chromium 供 Lighthouse 使用（复用 Playwright 浏览器可执行文件） */
+async function getLhChromium(): Promise<typeof import('playwright')['chromium']> {
+  // playwright 在模块加载时读取 PLAYWRIGHT_BROWSERS_PATH 并固定浏览器目录，
+  // 因此必须先探测路径（ensurePlaywrightBrowsersPath 在模块顶部已调用），
+  // 再动态导入 playwright 保证路径生效
+  return (await import('playwright')).chromium
+}
+
 async function launchLhBrowser(): Promise<{ port: number; done: () => void }> {
+  const chromium = await getLhChromium()
   const chromePath = chromium.executablePath()
   if (!chromePath) throw new Error('未找到可用的 Chromium 可执行文件')
   const profileDir = mkdtempSync(join(tmpdir(), 'lh-profile-'))

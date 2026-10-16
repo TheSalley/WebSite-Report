@@ -1,8 +1,16 @@
-import { chromium, type Browser, type Page } from 'playwright'
 import { ensurePlaywrightBrowsersPath } from './playwright-path'
+import type { Browser, Page } from 'playwright'
 
-// 启动前自动探测浏览器目录（服务器非 root 用户运行 npx next start 也可直接使用）
+// 必须在 playwright 模块加载前确定浏览器目录（playwright 在模块加载时读取
+// PLAYWRIGHT_BROWSERS_PATH 并固定 registryDirectory），因此这里用动态导入。
 ensurePlaywrightBrowsersPath()
+
+let chromium: typeof import('playwright')['chromium'] | null = null
+
+async function getChromium(): Promise<typeof import('playwright')['chromium']> {
+  if (!chromium) chromium = (await import('playwright')).chromium
+  return chromium
+}
 
 let browser: Browser | null = null
 
@@ -12,7 +20,8 @@ let browser: Browser | null = null
  */
 export async function getBrowser(): Promise<Browser> {
   if (browser && browser.isConnected()) return browser
-  browser = await chromium.launch({
+  const c = await getChromium()
+  browser = await c.launch({
     headless: true,
     args: [
       '--no-sandbox',
