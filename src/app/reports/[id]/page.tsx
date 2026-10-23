@@ -21,7 +21,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         <div className="flex gap-2">
           <a
             href={`/api/tasks/${id}/report?format=pdf`}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary-hover"
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-primary/20 bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-md shadow-primary/25 transition-all hover:bg-primary-hover"
           >
             <FileDown className="h-4 w-4" /> 下载 PDF
           </a>
@@ -34,7 +34,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           报告生成失败：{error}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl shadow-sm" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className="glass overflow-hidden rounded-2xl" dangerouslySetInnerHTML={{ __html: html }} />
       )}
     </div>
   )

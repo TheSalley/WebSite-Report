@@ -146,7 +146,7 @@ export default function SitesPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-border bg-zinc-50/60 text-xs text-foreground-muted dark:bg-zinc-800/30">
+                <tr className="border-b border-border/60 bg-white/40 text-xs text-foreground-muted backdrop-blur-sm dark:bg-white/[0.04]">
                   <th className="w-8 px-4 py-3">
                     <input
                       type="checkbox"
@@ -165,7 +165,7 @@ export default function SitesPage() {
               </thead>
               <tbody>
                 {sites.map((s) => (
-                  <tr key={s.id} className="border-b border-border/70 transition-colors hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40">
+                  <tr key={s.id} className="border-b border-border/60 transition-colors hover:bg-white/55 dark:hover:bg-white/[0.05]">
                     <td className="px-4 py-3.5">
                       <input
                         type="checkbox"

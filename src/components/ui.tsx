@@ -15,12 +15,12 @@ export function Button({
 }) {
   const variants: Record<string, string> = {
     default:
-      'bg-primary text-primary-foreground shadow-sm hover:bg-primary-hover active:translate-y-[0.5px]',
+      'bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary-hover active:translate-y-[0.5px] active:shadow-sm',
     outline:
-      'border border-border-strong bg-background-elevated text-foreground shadow-sm hover:bg-zinc-50 hover:border-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:border-zinc-600',
-    ghost: 'text-foreground-muted hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800',
-    danger: 'bg-danger text-white shadow-sm hover:opacity-90',
-    success: 'bg-success text-white shadow-sm hover:opacity-90'
+      'glass text-foreground hover:bg-white/70 hover:border-border-strong dark:hover:bg-white/10',
+    ghost: 'text-foreground-muted hover:bg-white/70 hover:text-foreground dark:hover:bg-white/10',
+    danger: 'bg-danger text-white shadow-md shadow-danger/25 hover:opacity-90 active:translate-y-[0.5px]',
+    success: 'bg-success text-white shadow-md shadow-success/25 hover:opacity-90 active:translate-y-[0.5px]'
   }
   const sizes: Record<string, string> = {
     sm: 'h-8 px-3 text-xs gap-1.5',
@@ -29,7 +29,7 @@ export function Button({
   }
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-md font-medium transition-all disabled:pointer-events-none disabled:opacity-50 ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-lg font-medium transition-all disabled:pointer-events-none disabled:opacity-50 ${variants[variant]} ${sizes[size]} ${className}`}
       {...props}
     />
   )
@@ -39,7 +39,7 @@ export function Button({
 export function Input({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`h-9 w-full rounded-md border border-border bg-background-elevated px-3 text-sm text-foreground shadow-sm outline-none transition placeholder:text-foreground-subtle focus:border-primary focus:ring-2 focus:ring-primary/20 dark:bg-background-elevated ${className}`}
+      className={`h-9 w-full rounded-lg border border-border bg-white/55 px-3 text-sm text-foreground shadow-sm shadow-black/[0.03] outline-none transition placeholder:text-foreground-subtle focus:border-primary focus:ring-2 focus:ring-primary/20 dark:bg-white/[0.06] ${className}`}
       {...props}
     />
   )
@@ -48,7 +48,7 @@ export function Input({ className = '', ...props }: React.InputHTMLAttributes<HT
 export function Textarea({ className = '', ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={`w-full rounded-md border border-border bg-background-elevated px-3 py-2 text-sm text-foreground shadow-sm outline-none transition placeholder:text-foreground-subtle focus:border-primary focus:ring-2 focus:ring-primary/20 ${className}`}
+      className={`w-full rounded-lg border border-border bg-white/55 px-3 py-2 text-sm text-foreground shadow-sm shadow-black/[0.03] outline-none transition placeholder:text-foreground-subtle focus:border-primary focus:ring-2 focus:ring-primary/20 dark:bg-white/[0.06] ${className}`}
       {...props}
     />
   )
@@ -74,7 +74,7 @@ export function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`h-9 rounded-md border border-border bg-background-elevated px-2.5 text-sm text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 ${className}`}
+      className={`h-9 rounded-lg border border-border bg-white/55 px-2.5 text-sm text-foreground shadow-sm shadow-black/[0.03] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:bg-white/[0.06] ${className}`}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -94,7 +94,7 @@ export function Switch({ checked, onCheckedChange }: { checked: boolean; onCheck
       aria-checked={checked}
       onClick={() => onCheckedChange(!checked)}
       className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
-        checked ? 'bg-success' : 'bg-zinc-300 dark:bg-zinc-700'
+        checked ? 'bg-success shadow-sm shadow-success/30' : 'bg-zinc-300/80 shadow-inner dark:bg-zinc-700'
       }`}
     >
       <span
@@ -132,7 +132,7 @@ export function Badge({
 export function Card({ className = '', children }: { className?: string; children: React.ReactNode }) {
   return (
     <div
-      className={`rounded-xl border border-border bg-background-elevated shadow-sm dark:border-border ${className}`}
+      className={`glass glass-hover rounded-2xl ${className}`}
     >
       {children}
     </div>
@@ -166,9 +166,9 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative w-full ${width} rounded-xl border border-border bg-background-elevated shadow-lg dark:border-border`}
+        className={`relative w-full ${width} rounded-2xl border border-border/60 bg-white/75 shadow-2xl shadow-black/10 backdrop-blur-2xl dark:bg-[#151b30]/85`}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-border/70 px-5 py-4">
           <h3 className="text-base font-semibold">{title}</h3>
           <div className="flex shrink-0 items-center gap-1.5">
             {actions}
@@ -191,7 +191,7 @@ export function Dialog({
 /* ── Empty state ── */
 export function Empty({ icon, title, description }: { icon?: React.ReactNode; title: string; description?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong py-12 text-center">
+    <div className="glass flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border-strong py-12 text-center">
       {icon && <div className="text-foreground-subtle">{icon}</div>}
       <div className="text-sm font-medium text-foreground-muted">{title}</div>
       {description && <div className="max-w-sm text-xs text-foreground-subtle">{description}</div>}

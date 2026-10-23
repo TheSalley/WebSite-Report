@@ -189,7 +189,7 @@ export default function RulesPage() {
                   <div
                     key={rs.id}
                     className={`group flex items-center gap-1 px-3 py-2.5 text-sm transition-colors ${
-                      active ? 'bg-primary-soft' : 'hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40'
+                      active ? 'bg-primary-soft/70 backdrop-blur-sm' : 'hover:bg-white/55 dark:hover:bg-white/[0.05]'
                     }`}
                   >
                     <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => selectSet(rs.id)}>
@@ -218,7 +218,7 @@ export default function RulesPage() {
           {/* 右侧规则编辑 */}
           {selectedId !== null && (
             <Card className="overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-zinc-50/60 px-5 py-3.5 dark:bg-zinc-800/20">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-white/40 px-5 py-3.5 dark:bg-white/[0.04]">
                 <div>
                   <h2 className="text-base font-semibold">{ruleSets.find((r) => r.id === selectedId)?.name}</h2>
                   <p className="mt-0.5 text-xs text-foreground-subtle">{rules.filter((r) => r.enabled).length}/{rules.length} 条启用</p>
@@ -242,7 +242,7 @@ export default function RulesPage() {
                     return (
                       <div key={groupName}>
                         <button
-                          className="flex w-full items-center justify-between rounded-md border border-border bg-zinc-50/60 px-3.5 py-2.5 text-sm font-medium transition-colors hover:bg-zinc-100/70 dark:bg-zinc-800/30 dark:hover:bg-zinc-800/60"
+                          className="flex w-full items-center justify-between rounded-lg border border-border/60 bg-white/45 px-3.5 py-2.5 text-sm font-medium transition-colors hover:bg-white/65 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"
                           onClick={() => setExpandGroup((g) => ({ ...g, [groupName]: !g[groupName] }))}
                           aria-expanded={expanded}
                         >
@@ -258,8 +258,8 @@ export default function RulesPage() {
                                 key={rule.id ?? rule.ruleKey}
                                 className={`flex flex-wrap items-center gap-3 rounded-lg border px-3.5 py-2.5 transition-colors ${
                                   rule.enabled
-                                    ? 'border-border bg-background'
-                                    : 'border-dashed border-border-strong bg-zinc-50/40 opacity-70 dark:bg-zinc-800/20'
+                                    ? 'border-border/70 bg-white/50 dark:bg-white/[0.05]'
+                                    : 'border-dashed border-border-strong bg-white/25 opacity-70 dark:bg-white/[0.03]'
                                 }`}
                               >
                                 <Switch checked={rule.enabled} onCheckedChange={(v) => patchRule(rule, { enabled: v })} />
@@ -336,8 +336,8 @@ export default function RulesPage() {
         <div className="space-y-2">
           <p className="text-xs text-foreground-subtle">点击规则将其加入当前规则集；重复规则会自动跳过。</p>
           {Array.from(new Map(catalog.map((r) => [r.groupName, r])).keys()).map((groupName) => (
-            <div key={groupName} className="overflow-hidden rounded-md border border-border">
-              <div className="border-b border-border bg-zinc-50/60 px-3 py-1.5 text-sm font-medium dark:bg-zinc-800/30">{groupName}</div>
+            <div key={groupName} className="overflow-hidden rounded-xl border border-border/60 bg-white/45 dark:bg-white/[0.04]">
+              <div className="border-b border-border/60 bg-white/40 px-3 py-1.5 text-sm font-medium dark:bg-white/[0.04]">{groupName}</div>
               <div className="divide-y divide-border/70">
                 {catalog.filter((r) => r.groupName === groupName).map((item) => {
                   const added = rules.some((r) => r.ruleKey === item.ruleKey)
@@ -346,7 +346,7 @@ export default function RulesPage() {
                       key={item.ruleKey}
                       onClick={() => addRule(item)}
                       disabled={added}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-zinc-50/70 disabled:opacity-45 disabled:hover:bg-transparent dark:hover:bg-zinc-800/40"
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-white/55 disabled:opacity-45 disabled:hover:bg-transparent dark:hover:bg-white/[0.05]"
                     >
                       <span className="flex items-center gap-2">
                         <span>{item.name}</span>

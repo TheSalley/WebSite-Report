@@ -28,7 +28,7 @@ export default function DocsPage() {
         {steps.map((s) => {
           const Icon = s.icon
           return (
-            <div key={s.title} className="rounded-xl border border-border bg-background-elevated p-5 shadow-sm transition-shadow hover:shadow-md">
+            <div key={s.title} className="glass glass-hover rounded-2xl p-5">
               <div className="flex items-center gap-3">
                 <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${s.accent}`}>
                   <Icon className="h-4.5 w-4.5" />
@@ -48,7 +48,7 @@ export default function DocsPage() {
         </h2>
         <div className="space-y-3">
           {groups.map((g) => (
-            <div key={g.name} className="rounded-xl border border-border bg-background-elevated p-4 shadow-sm">
+            <div key={g.name} className="glass glass-hover rounded-2xl p-4">
               <div className={`text-sm font-semibold ${g.color}`}>{g.name}</div>
               <p className="mt-1 text-sm leading-6 text-foreground-muted">{g.desc}</p>
             </div>

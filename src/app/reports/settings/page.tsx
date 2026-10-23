@@ -55,7 +55,7 @@ export default function ReportSettingsPage() {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-border bg-zinc-50/60 px-5 py-3.5 dark:bg-zinc-800/20">
+        <div className="flex items-center gap-2 border-b border-border/60 bg-white/40 px-5 py-3.5 dark:bg-white/[0.04]">
           <Settings className="h-4 w-4 text-primary" />
           <h2 className="text-base font-semibold">报告模板</h2>
         </div>
@@ -101,7 +101,7 @@ export default function ReportSettingsPage() {
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="border-b border-border bg-zinc-50/60 px-5 py-3.5 dark:bg-zinc-800/20">
+        <div className="border-b border-border/60 bg-white/40 px-5 py-3.5 dark:bg-white/[0.04]">
           <h2 className="text-base font-semibold">PageSpeed 评分</h2>
         </div>
         <div className="space-y-5 px-5 py-5">

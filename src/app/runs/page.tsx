@@ -293,7 +293,7 @@ export default function RunsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-border bg-zinc-50/60 text-xs text-foreground-muted dark:bg-zinc-800/30">
+                <tr className="border-b border-border/60 bg-white/40 text-xs text-foreground-muted backdrop-blur-sm dark:bg-white/[0.04]">
                   <th className="px-4 py-3 font-medium">ID</th>
                   <th className="px-4 py-3 font-medium">站点</th>
                   <th className="px-4 py-3 font-medium">规则集</th>
@@ -308,7 +308,7 @@ export default function RunsPage() {
                   <tr
                     key={t.id}
                     onClick={() => openTask(t)}
-                    className="cursor-pointer border-b border-border/70 transition-colors hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40"
+                    className="cursor-pointer border-b border-border/60 transition-colors hover:bg-white/55 dark:hover:bg-white/[0.05]"
                   >
                     <td className="px-4 py-3.5 font-mono text-xs text-foreground-subtle">#{t.id}</td>
                     <td className="px-4 py-3.5">
@@ -323,7 +323,7 @@ export default function RunsPage() {
                           <div className="text-[11px] text-foreground-subtle">
                             {t.progress.done}/{t.progress.total} · {t.progress.ruleName}
                           </div>
-                          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-white/60 shadow-inner dark:bg-white/10">
                             <div
                               className="h-full rounded-full bg-primary transition-all duration-500"
                               style={{ width: `${Math.round((t.progress.done / Math.max(t.progress.total, 1)) * 100)}%` }}
@@ -472,7 +472,7 @@ export default function RunsPage() {
           <div>
             {/* 概览条 */}
             {!resultsLoading && results.length > 0 && (
-              <div className="mb-5 flex flex-wrap items-center gap-6 rounded-xl border border-border bg-background p-4">
+              <div className="glass mb-5 flex flex-wrap items-center gap-6 rounded-2xl p-4">
                 <div className="grid flex-1 grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
                   <div>
                     <div className="text-xs text-foreground-subtle">通过</div>
@@ -533,9 +533,9 @@ export default function RunsPage() {
                   {(['mobile', 'desktop'] as const).map((strategy) => (
                     <div
                       key={strategy}
-                      className="overflow-hidden rounded-lg border border-border bg-background transition-shadow hover:shadow-sm"
+                      className="overflow-hidden rounded-xl border border-border/60 bg-white/55 shadow-sm shadow-black/[0.04] transition-shadow hover:shadow-md dark:bg-white/[0.05]"
                     >
-                      <div className="flex items-center gap-3 border-b border-border bg-zinc-50/60 px-4 py-2.5 dark:bg-zinc-800/30">
+                      <div className="flex items-center gap-3 border-b border-border/60 bg-white/40 px-4 py-2.5 dark:bg-white/[0.04]">
                         <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-soft text-primary">
                           {strategy === 'mobile' ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
                         </span>
@@ -569,7 +569,7 @@ export default function RunsPage() {
 
                 <div className="grid gap-3 lg:grid-cols-2">
                   {filteredResults.map((r) => (
-                    <div key={r.id} className="rounded-lg border border-border bg-background p-4 transition-shadow hover:shadow-sm">
+                    <div key={r.id} className="glass rounded-xl p-4 transition-shadow hover:shadow-md">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
