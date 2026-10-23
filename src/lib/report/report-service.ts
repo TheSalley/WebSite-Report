@@ -70,6 +70,33 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;')
 }
 
+/** 常见状态 emoji → 内联 SVG（服务器缺 emoji 字体时 PDF/打印也能正确显示） */
+const EMOJI_SVG: ReadonlyArray<readonly [string, string]> = [
+  ['✅', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="通过"><circle cx="12" cy="12" r="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/><path d="m8 12.4 2.6 2.6L16.2 9.6" fill="none" stroke="#16a34a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['❌', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="失败"><circle cx="12" cy="12" r="10" fill="#fee2e2" stroke="#dc2626" stroke-width="1.6"/><path d="m9 9 6 6M15 9l-6 6" stroke="#dc2626" stroke-width="2.4" stroke-linecap="round"/></svg>'],
+  ['⚠️', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="警告"><path d="M12 3 2.5 20h19L12 3Z" fill="#fef3c7" stroke="#d97706" stroke-width="1.8" stroke-linejoin="round"/><line x1="12" y1="9.4" x2="12" y2="14" stroke="#d97706" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.3" fill="#d97706"/></svg>'],
+  ['⚠', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="警告"><path d="M12 3 2.5 20h19L12 3Z" fill="#fef3c7" stroke="#d97706" stroke-width="1.8" stroke-linejoin="round"/><line x1="12" y1="9.4" x2="12" y2="14" stroke="#d97706" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.3" fill="#d97706"/></svg>'],
+  ['✔️', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="通过"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="#16a34a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['✔', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="通过"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="#16a34a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['✓', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="通过"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="#16a34a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['✗', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="失败"><path d="m6 6 12 12M18 6 6 18" stroke="#dc2626" stroke-width="2.8" stroke-linecap="round"/></svg>'],
+  ['☑️', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="已勾选"><rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/><path d="m8 12.4 2.6 2.6L16.2 9.6" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['☑', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="已勾选"><rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/><path d="m8 12.4 2.6 2.6L16.2 9.6" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['🟢', '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="正常"><circle cx="12" cy="12" r="10" fill="#22c55e"/></svg>'],
+  ['🔴', '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="异常"><circle cx="12" cy="12" r="10" fill="#ef4444"/></svg>'],
+  ['🟡', '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="提醒"><circle cx="12" cy="12" r="10" fill="#eab308"/></svg>']
+]
+
+/** 转义 HTML 并把常见 emoji 替换为内联 SVG（网页与 PDF 显示一致，不依赖服务器 emoji 字体） */
+function safeReportText(raw: string | null | undefined): string {
+  if (!raw) return ''
+  let out = escapeHtml(raw)
+  for (const [emoji, svg] of EMOJI_SVG) {
+    out = out.split(emoji).join(svg)
+  }
+  return out
+}
+
 /** 读取截图文件并转为 data URL */
 async function readScreenshotAsDataUrl(relativePath: string | null): Promise<string | null> {
   if (!relativePath) return null
@@ -240,15 +267,15 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
             idx === 0
               ? `<td rowspan="${groupResults.length}" class="group-cell">${escapeHtml(groupName)}<span class="group-count">${groupResults.length} 项</span></td>`
               : ''
-          const noteHtml = r.note ? `<div class="note">备注：${escapeHtml(r.note)}</div>` : ''
+          const noteHtml = r.note ? `<div class="note">备注：${safeReportText(r.note)}</div>` : ''
           const descParts: string[] = []
-          if (r.description) descParts.push(escapeHtml(r.description))
+          if (r.description) descParts.push(safeReportText(r.description))
           const descHtml = descParts.join('；')
           return `<tr>
             ${firstCell}
             <td class="item-cell"><div class="item-name">${escapeHtml(r.ruleName)}</div></td>
             <td class="desc-cell">${descHtml}${noteHtml}</td>
-            <td class="deliver-cell">${r.deliverable && r.deliverable.trim() ? `<span class="deliver-text">${escapeHtml(r.deliverable)}</span>` : statusBadgeHtml(r.status)}</td>
+            <td class="deliver-cell">${r.deliverable && r.deliverable.trim() ? `<span class="deliver-text">${safeReportText(r.deliverable)}</span>` : statusBadgeHtml(r.status)}</td>
           </tr>`
         })
         .join('')
@@ -273,7 +300,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
 
   return `<style>
   .report-root, .report-root * { box-sizing: border-box; margin: 0; padding: 0; }
-  .report-root { font-family: "Microsoft YaHei", "PingFang SC", "SimSun", sans-serif; color: #1f2430; background: #f6f8fb; padding: 32px 40px; line-height: 1.65; }
+  .report-root { font-family: "Microsoft YaHei", "PingFang SC", "SimSun", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; color: #1f2430; background: #f6f8fb; padding: 32px 40px; line-height: 1.65; }
   @media print {
     .report-root { padding: 0; }
     @page { size: A4; }
