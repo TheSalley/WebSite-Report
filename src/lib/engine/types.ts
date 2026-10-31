@@ -14,6 +14,10 @@ export interface PageSnapshot {
   ogTags: Record<string, string>
   /** 页面内 h1 列表 */
   h1s: string[]
+  /** Elementor 中同时含 elementor-hidden-desktop 与 elementor-hidden-mobile class 的元素（桌面+移动端同时隐藏） */
+  elementorHiddenBoth: { tag: string; id: string; classes: string; text: string }[]
+  /** 模板签名：过滤实例噪音（page-id/postid/slug 等）后的 body class 集合，用于模板级去重 */
+  templateSignature: string
   /** 页面内全部链接 href */
   allHrefs: string[]
   /** 页面可见文本 */
@@ -45,6 +49,14 @@ export interface PageSnapshot {
 /** 规则执行上下文 */
 export interface RuleContext {
   snapshot: PageSnapshot
+  /** 页面枚举阶段已采集的站点级数据（站点级规则优先使用，避免重复抓取） */
+  pageSet?: {
+    sitemaps: string[]
+    locTotal: number
+    candidateCount: number
+  }
+  /** 全部代表页的成功快照（站点级聚合规则使用，如全站 H1/Elementor 汇总） */
+  pageSnapshots?: { url: string; snapshot: PageSnapshot }[]
   /** 规则参数（可配置） */
   params: Record<string, unknown>
   /** 截图取证：失败/警告时调用，返回保存后的文件路径 */
@@ -63,6 +75,8 @@ export interface RuleOutcome {
   actual: string
   expected: string
   description: string
+  /** 可选：规则采集的原始数据（站点级规则附带，随结果返回任务层持久化） */
+  data?: unknown
 }
 
 /** 规则处理器签名 */

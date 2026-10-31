@@ -1,8 +1,9 @@
 import { join } from 'path'
 
 import { DATA_DIR } from './store'
-import type { CheckStatus } from './types'
+import type { CheckStatus, PageSpeedReportData } from './types'
 import { runTask, shutdownEngine } from './engine/runner'
+import { buildPageSet, type PageSetResult } from './engine/page-set'
 import { computeScore } from './engine/scoring'
 import { getBrowser } from './engine/browser'
 import { fetchPageSpeed } from './engine/pagespeed'
@@ -75,19 +76,57 @@ export async function startTask(siteId: number, ruleSetId: number): Promise<numb
   logInfo(`任务创建，site=${site.name} ruleset=${ruleSet.name} 共${rules.length}条规则`, taskId)
 
   // 后台执行（不阻塞 API 响应）
-  void runInBackground(taskId, site.url, rules, state)
+  void runInBackground(taskId, site.url, ruleSet.scanPages === true, rules, state)
 
   return taskId
 }
 
 /** 后台执行引擎并保存结果 */
-async function runInBackground(taskId: number, url: string, rules: RuleRow[], state: RunningTaskState): Promise<void> {
+async function runInBackground(taskId: number, url: string, scanPages: boolean, rules: RuleRow[], state: RunningTaskState): Promise<void> {
   const startMillis = Date.now()
   try {
+    // 多页面模板检查：sitemap 枚举 + 模板去重，仅检测代表页
+    let pages: string[] = [url]
+    let pageSetResult: PageSetResult | undefined
+    if (scanPages) {
+      pageSetResult = await buildPageSet(url, {
+        signal: state.signal,
+        onClassify: (doneCount, totalCount) => {
+          state.done = doneCount
+          state.total = totalCount
+          state.currentRuleKey = 'page-set'
+          state.currentRuleName = '枚举站点页面'
+          state.lastStatus = null
+        }
+      })
+      pages = pageSetResult.pages.map((i) => i.url)
+      logInfo('页面集合（sitemap 枚举 + 模板去重）：' + pages.length + ' 个代表页', taskId)
+      await updateTask(taskId, {
+        pageSetJson: JSON.stringify({
+          sitemaps: pageSetResult.sitemaps,
+          candidateCount: pageSetResult.candidateCount,
+          locTotal: pageSetResult.locTotal,
+          representatives: pageSetResult.pages.map((p) => ({ url: p.url, templateSignature: p.templateSignature }))
+        })
+      })
+      if (state.signal.cancelled) {
+        logWarn('页面枚举阶段已取消', taskId)
+        await updateTask(taskId, { status: 'stopped', finishedAt: new Date().toISOString() })
+        return
+      }
+      // 站点级规则整站只跑 1 次，页面级规则按代表页执行
+      const siteCount = rules.filter((r) => r.scope === 'site').length
+      state.done = 0
+      state.total = siteCount + (rules.length - siteCount) * pages.length
+    }
+
     const result = await runTask({
-      url,
+      pages,
       rules,
       taskId,
+      sitePageSet: pageSetResult
+        ? { sitemaps: pageSetResult.sitemaps, locTotal: pageSetResult.locTotal, candidateCount: pageSetResult.candidateCount }
+        : undefined,
       screenshotBaseDir: join(DATA_DIR, 'screenshots'),
       signal: state.signal,
       onProgress: (done, total, ruleName, ruleKey, status) => {
@@ -138,20 +177,34 @@ async function runInBackground(taskId: number, url: string, rules: RuleRow[], st
       skipCount: score.skipCount,
       verifyCount: score.verifyCount
     })
+    // 持久化站点级规则的结构化数据（如交付检查逐页明细），供报告按页面表格渲染
+    if (result.siteData && Object.keys(result.siteData).length > 0) {
+      await updateTask(taskId, { siteDataJson: JSON.stringify(result.siteData) })
+    }
 
-    // 采集 PageSpeed 评分与页面截图（失败不阻塞任务状态，仅记录）
+    // PageSpeed 评分：优先复用站点级规则 perf.pagespeed.score 已采集的数据，否则任务层独立采集
+    const rulePs = result.siteData?.['perf.pagespeed.score'] as PageSpeedReportData | undefined
+    // PageSpeed 评分与截图仅在建站服务合同验收等含 perf.pagespeed.score 规则的规则集执行；网站交付检查等其他规则集不采集
+    const hasPagespeedRule = rules.some((r) => r.ruleKey === 'perf.pagespeed.score')
     state.currentRuleKey = 'pagespeed'
     state.currentRuleName = 'PageSpeed 评分与截图'
     logInfo('开始采集 PageSpeed 评分与截图', taskId)
-    if (state.signal.cancelled) {
+    if (!hasPagespeedRule) {
+      logInfo('规则集未包含 PageSpeed 规则（perf.pagespeed.score），跳过 PageSpeed 评分与截图', taskId)
+    } else if (state.signal.cancelled) {
       logWarn('PageSpeed 采集前已被取消，跳过', taskId)
     } else {
-      try {
-        const pagespeed = await fetchPageSpeed(url)
-        await updateTask(taskId, { pagespeedJson: JSON.stringify(pagespeed) })
-        logInfo('PageSpeed 评分采集完成', taskId)
-      } catch (e) {
-        logError('PageSpeed 评分采集异常（不影响主结果）', e, taskId)
+      if (rulePs) {
+        await updateTask(taskId, { pagespeedJson: JSON.stringify(rulePs) })
+        logInfo('PageSpeed 评分已由站点级规则 perf.pagespeed.score 采集', taskId)
+      } else {
+        try {
+          const pagespeed = await fetchPageSpeed(url)
+          await updateTask(taskId, { pagespeedJson: JSON.stringify(pagespeed) })
+          logInfo('PageSpeed 评分采集完成', taskId)
+        } catch (e) {
+          logError('PageSpeed 评分采集异常（不影响主结果）', e, taskId)
+        }
       }
       // 取消后不再截图
       if (state.signal.cancelled) {

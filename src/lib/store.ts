@@ -28,6 +28,8 @@ export interface RuleRow {
   description?: string
   /** 交付成果文案（报告「交付成果」列展示，留空显示状态徽章） */
   deliverable?: string
+  /** 执行范围：'site' 站点级（整站仅执行一次）| 'page' 页面级（每个代表页执行，默认） */
+  scope?: 'page' | 'site'
   params: Record<string, unknown>
   sortOrder: number
 }
@@ -38,6 +40,7 @@ export interface RuleSetRow {
   description: string
   isBuiltin: boolean
   parentId: number | null
+  scanPages: boolean
   createdAt: string
   updatedAt: string
 }
@@ -56,6 +59,8 @@ export interface TaskRow {
   startedAt: string | null
   finishedAt: string | null
   pagespeedJson: string | null
+  pageSetJson: string | null
+  siteDataJson: string | null
   error: string | null
 }
 
@@ -66,6 +71,7 @@ export interface CheckResultRow {
   ruleKey: string
   ruleName: string
   groupName: string
+  pageUrl: string
   status: 'pass' | 'warn' | 'fail' | 'skip' | 'verify'
   actualValue: string
   expectedValue: string
@@ -105,6 +111,7 @@ function getDb(): DatabaseSync {
         name TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
         isBuiltin INTEGER NOT NULL DEFAULT 0,
+        scanPages INTEGER NOT NULL DEFAULT 0,
         parentId INTEGER,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL
@@ -118,6 +125,7 @@ function getDb(): DatabaseSync {
         enabled INTEGER NOT NULL DEFAULT 1,
         description TEXT,
         deliverable TEXT,
+        scope TEXT NOT NULL DEFAULT 'page',
         params TEXT NOT NULL DEFAULT '{}',
         sortOrder INTEGER NOT NULL DEFAULT 0
       );
@@ -136,6 +144,7 @@ function getDb(): DatabaseSync {
         startedAt TEXT,
         finishedAt TEXT,
         pagespeedJson TEXT,
+        pageSetJson TEXT,
         error TEXT
       );
       CREATE TABLE IF NOT EXISTS check_results (
@@ -145,6 +154,7 @@ function getDb(): DatabaseSync {
         ruleKey TEXT NOT NULL,
         ruleName TEXT NOT NULL,
         groupName TEXT NOT NULL,
+        pageUrl TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL,
         actualValue TEXT NOT NULL DEFAULT '',
         expectedValue TEXT NOT NULL DEFAULT '',
@@ -160,7 +170,7 @@ function getDb(): DatabaseSync {
         value TEXT NOT NULL
       );
     `)
-    ensureDeliverableColumns(db)
+    ensureCompatColumns(db)
     migrateFromJson(db)
   }
   return db
@@ -231,7 +241,7 @@ function importJsonList(
 }
 
 /** 兼容旧库：幂等补齐 deliverable 列（已存在则跳过） */
-function ensureDeliverableColumns(sqlite: DatabaseSync): void {
+function ensureCompatColumns(sqlite: DatabaseSync): void {
   const cols = (t: string): string[] => {
     try {
       const rows = sqlite.prepare(`PRAGMA table_info(${t})`).all() as SqlRow[]
@@ -245,6 +255,22 @@ function ensureDeliverableColumns(sqlite: DatabaseSync): void {
   }
   if (!cols('check_results').includes('deliverable')) {
     sqlite.exec("ALTER TABLE check_results ADD COLUMN deliverable TEXT NOT NULL DEFAULT ''")
+  }
+  if (!cols('rules').includes('scope')) {
+    sqlite.exec("ALTER TABLE rules ADD COLUMN scope TEXT NOT NULL DEFAULT 'page'")
+  }
+  // 新增：规则集多页面开关 / 结果按页面分组（幂等）
+  if (!cols('rule_sets').includes('scanPages')) {
+    sqlite.exec('ALTER TABLE rule_sets ADD COLUMN scanPages INTEGER NOT NULL DEFAULT 0')
+  }
+  if (!cols('check_results').includes('pageUrl')) {
+    sqlite.exec("ALTER TABLE check_results ADD COLUMN pageUrl TEXT NOT NULL DEFAULT ''")
+  }
+  if (!cols('tasks').includes('pageSetJson')) {
+    sqlite.exec('ALTER TABLE tasks ADD COLUMN pageSetJson TEXT')
+  }
+  if (!cols('tasks').includes('siteDataJson')) {
+    sqlite.exec('ALTER TABLE tasks ADD COLUMN siteDataJson TEXT')
   }
   // 旧库补预设：规则行无 deliverable 时用预设文案回填
   const preset = sqlite.prepare("SELECT ruleKey FROM rules WHERE deliverable IS NULL OR trim(deliverable) = ''").all() as SqlRow[]
@@ -272,9 +298,10 @@ function migrateFromJson(sqlite: DatabaseSync): void {
   importJsonList(sqlite, 'rule_sets', 'rulesets.json', ['id', 'name', 'description', 'isBuiltin', 'parentId', 'createdAt', 'updatedAt'], (r) => [
     num(r.id), str(r.name), str(r.description), r.isBuiltin ? 1 : 0, r.parentId == null ? null : num(r.parentId), str(r.createdAt), str(r.updatedAt)
   ])
-  importJsonList(sqlite, 'rules', 'rules.json', ['id', 'ruleSetId', 'groupName', 'ruleKey', 'name', 'enabled', 'description', 'deliverable', 'params', 'sortOrder'], (r) => [
+  importJsonList(sqlite, 'rules', 'rules.json', ['id', 'ruleSetId', 'groupName', 'ruleKey', 'name', 'enabled', 'description', 'deliverable', 'scope', 'params', 'sortOrder'], (r) => [
     num(r.id), num(r.ruleSetId), str(r.groupName), str(r.ruleKey), str(r.name), r.enabled === false ? 0 : 1,
-    r.description == null ? null : str(r.description), strOrNull((r as any).deliverable), JSON.stringify(r.params ?? {}), num(r.sortOrder)
+    r.description == null ? null : str(r.description), strOrNull((r as any).deliverable), strOrNull((r as any).scope) || 'page',
+    JSON.stringify(r.params ?? {}), num(r.sortOrder)
   ])
   importJsonList(sqlite, 'tasks', 'tasks.json', ['id', 'siteId', 'ruleSetId', 'status', 'score', 'passCount', 'warnCount', 'failCount', 'skipCount', 'verifyCount', 'startedAt', 'finishedAt', 'pagespeedJson', 'error'], (r) => [
     num(r.id), num(r.siteId), num(r.ruleSetId), str(r.status), r.score == null ? null : num(r.score),
@@ -404,6 +431,7 @@ export async function listRuleSets(): Promise<(RuleSetRow & { ruleCount?: number
   return rows.map((r) => {
     const out = r as unknown as RuleSetRow & { ruleCount: number }
     out.isBuiltin = bool(r.isBuiltin)
+    out.scanPages = bool(r.scanPages)
     out.ruleCount = num(r.ruleCount)
     return out
   })
@@ -414,6 +442,7 @@ export async function getRuleSet(id: number): Promise<RuleSetRow | null> {
   if (!row) return null
   const out = row as unknown as RuleSetRow
   out.isBuiltin = bool(row.isBuiltin)
+  out.scanPages = bool(row.scanPages)
   return out
 }
 
@@ -422,21 +451,23 @@ export async function createRuleSet(input: {
   description?: string
   isBuiltin?: boolean
   parentId?: number | null
+  scanPages?: boolean
 }): Promise<RuleSetRow> {
   const ts = now()
   const result = getDb()
-    .prepare('INSERT INTO rule_sets (name, description, isBuiltin, parentId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(input.name.trim(), input.description ?? '', input.isBuiltin ? 1 : 0, input.parentId ?? null, ts, ts)
+    .prepare('INSERT INTO rule_sets (name, description, isBuiltin, scanPages, parentId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(input.name.trim(), input.description ?? '', input.isBuiltin ? 1 : 0, input.scanPages ? 1 : 0, input.parentId ?? null, ts, ts)
   const created = await getRuleSet(Number(result.lastInsertRowid))
   return created as RuleSetRow
 }
 
-export async function updateRuleSet(id: number, input: { name?: string; description?: string }): Promise<RuleSetRow | null> {
+export async function updateRuleSet(id: number, input: { name?: string; description?: string; scanPages?: boolean }): Promise<RuleSetRow | null> {
   const current = await getRuleSet(id)
   if (!current) return null
+  const scanPages = input.scanPages !== undefined ? (input.scanPages ? 1 : 0) : current.scanPages ? 1 : 0
   getDb()
-    .prepare('UPDATE rule_sets SET name = ?, description = ?, updatedAt = ? WHERE id = ?')
-    .run(input.name?.trim() ?? current.name, input.description ?? current.description, now(), id)
+    .prepare('UPDATE rule_sets SET name = ?, description = ?, scanPages = ?, updatedAt = ? WHERE id = ?')
+    .run(input.name?.trim() ?? current.name, input.description ?? current.description, scanPages, now(), id)
   return getRuleSet(id)
 }
 
@@ -461,17 +492,17 @@ export async function duplicateRuleSet(id: number, newName: string): Promise<Rul
   sqlite.exec('BEGIN')
   try {
     const inserted = sqlite
-      .prepare('INSERT INTO rule_sets (name, description, isBuiltin, parentId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(newName, source.description, source.isBuiltin ? 1 : 0, source.parentId, ts, ts)
+      .prepare('INSERT INTO rule_sets (name, description, isBuiltin, scanPages, parentId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(newName, source.description, source.isBuiltin ? 1 : 0, source.scanPages ? 1 : 0, source.parentId, ts, ts)
     const newId = Number(inserted.lastInsertRowid)
     const srcRules = sqlite.prepare('SELECT * FROM rules WHERE ruleSetId = ? ORDER BY id').all(id) as SqlRow[]
     const max = sqlite.prepare('SELECT MAX(id) AS m FROM rules').get() as SqlRow
     let nextId = Number(max.m ?? 0)
     const insert = sqlite.prepare(
-      'INSERT INTO rules (id, ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, params, sortOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO rules (id, ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, scope, params, sortOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     for (const r of srcRules) {
-      insert.run(++nextId, newId, str(r.groupName), str(r.ruleKey), str(r.name), bool(r.enabled) ? 1 : 0, strOrNull(r.description), strOrNull(r.deliverable), str(r.params), num(r.sortOrder))
+      insert.run(++nextId, newId, str(r.groupName), str(r.ruleKey), str(r.name), bool(r.enabled) ? 1 : 0, strOrNull(r.description), strOrNull(r.deliverable), strOrNull(r.scope) || 'page', str(r.params), num(r.sortOrder))
     }
     sqlite.exec('COMMIT')
     return getRuleSet(newId)
@@ -494,6 +525,7 @@ export async function listRules(): Promise<RuleRow[]> {
     enabled: bool(r.enabled),
     description: strOrNull(r.description) ?? undefined,
     deliverable: strOrNull(r.deliverable) ?? undefined,
+    scope: (str(r.scope) || 'page') as 'page' | 'site',
     params: JSON.parse(str(r.params) || '{}') as Record<string, unknown>,
     sortOrder: num(r.sortOrder)
   }))
@@ -512,6 +544,7 @@ export async function listRulesForSet(ruleSetId: number): Promise<RuleRow[]> {
     enabled: bool(r.enabled),
     description: strOrNull(r.description) ?? undefined,
     deliverable: strOrNull(r.deliverable) ?? undefined,
+    scope: (str(r.scope) || 'page') as 'page' | 'site',
     params: JSON.parse(str(r.params) || '{}') as Record<string, unknown>,
     sortOrder: num(r.sortOrder)
   }))
@@ -538,10 +571,10 @@ export async function replaceRules(
   try {
     sqlite.prepare('DELETE FROM rules WHERE ruleSetId = ?').run(ruleSetId)
     const insert = sqlite.prepare(
-      'INSERT INTO rules (id, ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, params, sortOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO rules (id, ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, scope, params, sortOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     for (const r of assigned) {
-      insert.run(r.id, r.ruleSetId, r.groupName, r.ruleKey, r.name, r.enabled ? 1 : 0, r.description ?? null, r.deliverable ?? null, JSON.stringify(r.params ?? {}), r.sortOrder)
+      insert.run(r.id, r.ruleSetId, r.groupName, r.ruleKey, r.name, r.enabled ? 1 : 0, r.description ?? null, r.deliverable ?? null, r.scope ?? 'page', JSON.stringify(r.params ?? {}), r.sortOrder)
     }
     sqlite.exec('COMMIT')
   } catch (err) {
@@ -596,7 +629,7 @@ export async function createTask(input: { siteId: number; ruleSetId: number }): 
 
 const TASK_COLUMNS = new Set([
   'status', 'score', 'passCount', 'warnCount', 'failCount', 'skipCount', 'verifyCount',
-  'startedAt', 'finishedAt', 'pagespeedJson', 'error'
+  'startedAt', 'finishedAt', 'pagespeedJson', 'pageSetJson', 'siteDataJson', 'error'
 ])
 
 export async function updateTask(id: number, patch: Partial<TaskRow>): Promise<TaskRow | null> {
@@ -636,11 +669,11 @@ export async function saveCheckResults(taskId: number, results: Omit<CheckResult
   try {
     sqlite.prepare('DELETE FROM check_results WHERE taskId = ?').run(taskId)
     const insert = sqlite.prepare(
-      `INSERT INTO check_results (taskId, ruleId, ruleKey, ruleName, groupName, status, actualValue, expectedValue, description, deliverable, screenshotPath, note, checkedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO check_results (taskId, ruleId, ruleKey, ruleName, groupName, pageUrl, status, actualValue, expectedValue, description, deliverable, screenshotPath, note, checkedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     for (const r of results) {
-      insert.run(taskId, r.ruleId, r.ruleKey, r.ruleName, r.groupName, r.status, r.actualValue, r.expectedValue, r.description, r.deliverable ?? null, r.screenshotPath, r.note, r.checkedAt)
+      insert.run(taskId, r.ruleId, r.ruleKey, r.ruleName, r.groupName, r.pageUrl ?? '', r.status, r.actualValue, r.expectedValue, r.description, r.deliverable ?? null, r.screenshotPath, r.note, r.checkedAt)
     }
     sqlite.exec('COMMIT')
   } catch (err) {

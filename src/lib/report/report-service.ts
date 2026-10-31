@@ -4,6 +4,7 @@ import { DATA_DIR, getTask, getSite, getRuleSet, listCheckResults } from '../sto
 import { getReportSettings } from '../settings'
 import { DELIVERABLE_PRESETS } from '../seed'
 import { getBrowser } from '../engine/browser'
+import { describeElementorItem } from '../engine/rules/delivery'
 
 import type { CheckResult, ReportSettings, Site, RuleSet, Task } from '../types'
 
@@ -25,6 +26,10 @@ export interface ReportData {
   pagespeed: import('../types').PageSpeedReportData | null
   /** PageSpeed 页面截图（移动端/桌面端 dataURL） */
   pagespeedShots: { strategy: string; dataUrl: string | null }[]
+  /** 检测页面集合（sitemap 枚举 + 模板去重结果） */
+  pageSet: import('../types').TaskPageSet | null
+  /** 站点级规则的结构化数据（按 ruleKey，含交付检查逐页明细） */
+  siteData: Record<string, unknown> | null
 }
 
 /** ISO 时间 → 本地可读时间（YYYY-MM-DD HH:mm），空值/异常显示 — */
@@ -150,7 +155,9 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     finishedAt: finishedAt,
     site,
     ruleSet,
-    pagespeed: rawTask.pagespeedJson ? JSON.parse(rawTask.pagespeedJson) : null
+    pagespeed: rawTask.pagespeedJson ? JSON.parse(rawTask.pagespeedJson) : null,
+    pageSet: rawTask.pageSetJson ? JSON.parse(rawTask.pageSetJson) : null,
+    siteData: rawTask.siteDataJson ? JSON.parse(rawTask.siteDataJson) : null
   }
 
   const rawResults = await listCheckResults(taskId)
@@ -162,6 +169,7 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
       ruleKey: r.ruleKey,
       ruleName: r.ruleName,
       groupName: r.groupName,
+      pageUrl: r.pageUrl,
       status: r.status,
       actualValue: r.actualValue,
       expectedValue: r.expectedValue,
@@ -194,7 +202,9 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     verifyCount,
     settings: await getReportSettings(),
     pagespeed: task.pagespeed ?? null,
-    pagespeedShots: await readPagespeedShots(taskId)
+    pagespeedShots: await readPagespeedShots(taskId),
+    pageSet: task.pageSet ?? null,
+    siteData: task.siteData ?? null
   }
 }
 
@@ -209,6 +219,18 @@ function statusBadgeHtml(status: string): string {
   }
   const m = map[status] ?? { text: status, cls: 'skip' }
   return `<span class="badge badge-${m.cls}">${m.text}</span>`
+}
+
+/** 检测页面短标签：主页显示「主页」，否则显示 host + 路径 */
+function pageShort(url: string): string {
+  if (!url) return '主页'
+  try {
+    const x = new URL(url)
+    const path = x.pathname === '/' ? '' : x.pathname
+    return (x.hostname + (x.port ? ':' + x.port : '') + path + x.search).slice(0, 60)
+  } catch {
+    return url.slice(0, 60)
+  }
 }
 
 /** 生成报告 PDF（服务端 Chromium 渲染，A4 打印样式） */
@@ -274,6 +296,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
           return `<tr>
             ${firstCell}
             <td class="item-cell"><div class="item-name">${escapeHtml(r.ruleName)}</div></td>
+            <td class="page-cell">${escapeHtml(pageShort(r.pageUrl))}</td>
             <td class="desc-cell">${descHtml}${noteHtml}</td>
             <td class="deliver-cell">${r.deliverable && r.deliverable.trim() ? `<span class="deliver-text">${safeReportText(r.deliverable)}</span>` : statusBadgeHtml(r.status)}</td>
           </tr>`
@@ -297,6 +320,99 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
         )
         .join('')}
     </div>`
+
+  // ── 检测页面集合（sitemap 枚举 + 模板去重结果）──
+  const pageSet = data.pageSet
+  const pageSetSection = pageSet && pageSet.representatives.length > 0
+    ? `<div class="pageset-box">
+      <div class="pageset-head">
+        <span class="badge badge-pass">${pageSet.representatives.length} 个代表页</span>
+        <span class="pageset-hint">模板去重自 ${pageSet.candidateCount} 个候选 URL</span>
+      </div>
+      ${pageSet.sitemaps.length > 0 ? `<div class="pageset-sitemaps">${pageSet.sitemaps.map((sm) => `<span class="pageset-sm">${escapeHtml(sm)}</span>`).join('')}</div>` : ''}
+      <div class="pageset-table-wrap">
+        <table class="pageset-table">
+          <thead><tr><th style="width:62%">页面 URL</th><th>模板签名</th></tr></thead>
+          <tbody>${pageSet.representatives.map((p) => `<tr><td class="pageset-url">${escapeHtml(p.url)}</td><td class="pageset-sig">${escapeHtml(p.templateSignature || '—')}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`
+    : ''
+
+  // ── 交付检查明细（按页面）：Excel 式矩阵，逐页展示 H1 与 Elementor 隐藏板块 ──
+  interface DeliveryH1Page {
+    url: string
+    h1s: string[]
+  }
+  interface DeliveryElPage {
+    url: string
+    items: { tag: string; id: string; classes: string; text: string }[]
+  }
+  const h1Pages = (((data.siteData ?? {})['delivery.h1.count'] as { pages?: DeliveryH1Page[] } | undefined)?.pages ?? []) as DeliveryH1Page[]
+  const elPages = (((data.siteData ?? {})['delivery.elementor.hidden-both'] as { pages?: DeliveryElPage[] } | undefined)?.pages ?? []) as DeliveryElPage[]
+  const deliveryMatrix = (() => {
+    if (h1Pages.length + elPages.length === 0) return ''
+    const reps = data.pageSet?.representatives ?? []
+    const urls =
+      reps.length > 0
+        ? reps.map((r) => r.url)
+        : Array.from(new Set([...h1Pages.map((p) => p.url), ...elPages.map((p) => p.url)]))
+    const h1ByUrl = new Map(h1Pages.map((p) => [p.url, p]))
+    const elByUrl = new Map(elPages.map((p) => [p.url, p]))
+    const rows = urls
+      .map((url) => {
+        const h1 = h1ByUrl.get(url)
+        const el = elByUrl.get(url)
+        const h1Count = h1 ? h1.h1s.length : undefined
+        const h1Badge =
+          h1Count === undefined
+            ? '<span class="badge badge-skip">未采集</span>'
+            : h1Count === 1
+              ? '<span class="badge badge-pass">正常</span>'
+              : h1Count === 0
+                ? '<span class="badge badge-fail">缺 H1</span>'
+                : `<span class="badge badge-warn">${h1Count} 个 H1</span>`
+        const elCount = el ? el.items.length : undefined
+        const elBadge =
+          elCount === undefined
+            ? '<span class="badge badge-skip">未采集</span>'
+            : elCount === 0
+              ? '<span class="badge badge-pass">无</span>'
+              : `<span class="badge badge-fail">${elCount} 个</span>`
+        const elDetail =
+          el && el.items.length > 0
+            ? el.items.map((it) => `<div class="dx-el">${escapeHtml(describeElementorItem(it))}</div>`).join('')
+            : '<span class="dx-none">—</span>'
+        return `<tr>
+          <td class="dx-url">${escapeHtml(pageShort(url))}</td>
+          <td class="dx-num">${h1Count === undefined ? '—' : String(h1Count)}</td>
+          <td class="dx-badge">${h1Badge}</td>
+          <td class="dx-num">${elCount === undefined ? '—' : String(elCount)}</td>
+          <td class="dx-badge">${elBadge}</td>
+          <td class="dx-detail">${elDetail}</td>
+        </tr>`
+      })
+      .join('')
+    return `<div class="pageset-box matrix-box">
+      <div class="pageset-head">
+        <span class="badge badge-pass">${urls.length} 个页面</span>
+        <span class="pageset-hint">逐页展示 H1 与 Elementor 隐藏板块检测结果</span>
+      </div>
+      <div class="pageset-table-wrap">
+        <table class="pageset-table matrix-table">
+          <thead><tr>
+            <th style="width:26%">页面</th>
+            <th style="width:9%;text-align:center">H1 数量</th>
+            <th style="width:13%;text-align:center">H1 状态</th>
+            <th style="width:11%;text-align:center">隐藏板块</th>
+            <th style="width:13%;text-align:center">状态</th>
+            <th style="width:28%">板块详情</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`
+  })()
 
   return `<style>
   .report-root, .report-root * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -352,6 +468,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .main-table tbody tr:nth-child(even) td { background: #fbfcfe; }
   .main-table tbody tr:hover td { background: #f1f5ff; }
   .main-table td.item-name { font-weight: 600; color: #1e293b; }
+  .main-table td.page-cell { font-size: 12px; color: #64748b; word-break: break-all; max-width: 150px; vertical-align: middle; }
   .main-table .sev { display: inline-block; margin-top: 2px; font-size: 11px; border: 1px solid; border-radius: 2px; padding: 0 4px; }
   .sev-critical { color: #b91c1c; border-color: #b91c1c; background: #fef2f2; }
   .sev-warning { color: #b45309; border-color: #b45309; background: #fffbeb; }
@@ -373,6 +490,28 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .shot-item { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #fff; box-shadow: 0 1px 8px rgba(15,23,42,.07); break-inside: avoid; }
   .shot-item img { width: 100%; display: block; border-radius: 6px; border: 1px solid #eef2f7; }
   .shot-item figcaption { font-size: 12px; color: #475569; padding: 6px 2px 0; text-align: center; font-weight: 600; }
+
+  /* 检测页面集合 */
+  .pageset-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; background: #fff; box-shadow: 0 1px 8px rgba(15,23,42,.06); margin-bottom: 4px; }
+  .pageset-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .pageset-hint { font-size: 12px; color: #64748b; }
+  .pageset-sitemaps { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .pageset-sm { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 2px 8px; }
+  .pageset-table-wrap { overflow-x: auto; }
+  .pageset-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .pageset-table th { text-align: left; font-size: 11px; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0; padding: 6px 8px; background: #fafbfe; }
+  .pageset-table td { border-bottom: 1px solid #eef2f7; padding: 6px 8px; color: #334155; }
+  .pageset-table tr:last-child td { border-bottom: none; }
+  .pageset-url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+  .pageset-sig { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #64748b; word-break: break-all; }
+  .matrix-box { margin-bottom: 4px; }
+  .matrix-table th { text-align: left; }
+  .matrix-table td.dx-url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; color: #334155; }
+  .matrix-table td.dx-num { text-align: center; color: #334155; }
+  .matrix-table td.dx-badge { text-align: center; }
+  .matrix-table td.dx-detail { font-size: 11px; color: #64748b; word-break: break-all; line-height: 1.5; }
+  .matrix-table .dx-el { margin-bottom: 3px; }
+  .matrix-table tr { break-inside: avoid; }
 
   .footer { margin-top: 32px; text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px solid #e5eaf3; padding-top: 14px; }
 </style>
@@ -400,14 +539,19 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   <table class="contract-table main-table">
     <thead>
       <tr>
-        <th style="width:12%">检测板块</th>
-        <th style="width:22%">检测项目</th>
-        <th style="width:46%">内容说明</th>
+        <th style="width:11%">检测板块</th>
+        <th style="width:18%">检测项目</th>
+        <th style="width:13%">检测页面</th>
+        <th style="width:44%">内容说明</th>
         <th style="width:14%">交付成果</th>
       </tr>
     </thead>
     <tbody>${mainRows}</tbody>
   </table>
+
+  ${deliveryMatrix ? `${sectionTitle('交付检查明细（按页面）')}${deliveryMatrix}` : ''}
+
+  ${pageSetSection ? `${sectionTitle('检测页面')}${pageSetSection}` : ''}
 
   ${screenshotSection ? `${sectionTitle('PageSpeed 评分截图')}${screenshotSection}` : ''}
 

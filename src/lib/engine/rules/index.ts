@@ -5,6 +5,7 @@ import { securityRules } from './security'
 import { contentRules } from './content'
 import { complianceRules } from './compliance'
 import { contractRules } from './contract'
+import { deliveryRules } from './delivery'
 
 /** 规则注册表：ruleKey -> 处理器 */
 const registry = new Map<string, RuleHandler>()
@@ -20,6 +21,7 @@ register(securityRules)
 register(contentRules)
 register(complianceRules)
 register(contractRules)
+register(deliveryRules)
 
 /** 是否有该规则的实现 */
 export function hasRule(ruleKey: string): boolean {

@@ -21,6 +21,7 @@ export default function RulesPage() {
   const [newDesc, setNewDesc] = React.useState('')
   const [addOpen, setAddOpen] = React.useState(false)
   const [expandGroup, setExpandGroup] = React.useState<Record<string, boolean>>({})
+  const selectedSet = ruleSets.find((rs) => rs.id === selectedId) ?? null
 
   const loadSets = async () => {
     try {
@@ -111,6 +112,16 @@ export default function RulesPage() {
     await fetch(`/api/rulesets/${id}`, { method: 'DELETE' })
     setSelectedId(null)
     await loadSets()
+  }
+
+  const toggleScanPages = async (v: boolean) => {
+    if (selectedId === null) return
+    const res = await fetch(`/api/rulesets/${selectedId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scanPages: v })
+    })
+    if (res.ok) await loadSets()
   }
 
   const patchRule = (rule: RuleRow, patch: Partial<RuleRow>) => {
@@ -234,6 +245,15 @@ export default function RulesPage() {
               </div>
 
               <div className="space-y-4 p-5">
+                {selectedSet?.name === '网站交付检查' && (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-white/40 px-4 py-2.5 dark:bg-white/[0.04]">
+                  <div className="pr-3">
+                    <div className="text-sm font-medium">多页面模板检查</div>
+                    <div className="text-xs text-foreground-subtle">按 sitemap 枚举整站页面并按模板去重，只检测代表页（新闻/产品等模板页只查 1 页）</div>
+                  </div>
+                  <Switch checked={selectedSet?.scanPages === true} onCheckedChange={toggleScanPages} />
+                </div>
+                )}
                 {groups.length === 0 ? (
                   <Empty icon={<ListChecks className="h-8 w-8" />} title="该规则集没有规则" description="点击「添加规则」从规则目录中选择。" />
                 ) : (
@@ -264,7 +284,12 @@ export default function RulesPage() {
                               >
                                 <Switch checked={rule.enabled} onCheckedChange={(v) => patchRule(rule, { enabled: v })} />
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-sm font-medium">{rule.name}</div>
+                                  <div className="text-sm font-medium">
+                                    {rule.name}
+                                    {rule.scope === 'site' && (
+                                      <span className="ml-1.5 rounded bg-primary-soft px-1.5 py-0.5 align-middle text-[10px] font-medium text-primary-soft-foreground">站点级</span>
+                                    )}
+                                  </div>
                                   <div className="font-mono text-[11px] text-foreground-subtle">{rule.ruleKey}</div>
                                   <Input
                                     className="mt-1.5 h-8 text-xs"

@@ -11,6 +11,10 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body?.name) return NextResponse.json({ error: '规则集名称必填' }, { status: 400 })
-  const rs = await createRuleSet({ name: String(body.name), description: body.description ? String(body.description) : undefined })
+  const rs = await createRuleSet({
+    name: String(body.name),
+    description: body.description ? String(body.description) : undefined,
+    scanPages: body.scanPages ? true : undefined
+  })
   return NextResponse.json(rs, { status: 201 })
 }

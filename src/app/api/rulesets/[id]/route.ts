@@ -17,7 +17,11 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     if (!dup) return NextResponse.json({ error: '规则集不存在' }, { status: 404 })
     return NextResponse.json(dup)
   }
-  const rs = await updateRuleSet(Number(id), { name: body?.name ? String(body.name) : undefined, description: body?.description !== undefined ? String(body.description) : undefined })
+  const rs = await updateRuleSet(Number(id), {
+    name: body?.name ? String(body.name) : undefined,
+    description: body?.description !== undefined ? String(body.description) : undefined,
+    scanPages: body?.scanPages !== undefined ? Boolean(body.scanPages) : undefined
+  })
   if (!rs) return NextResponse.json({ error: '规则集不存在' }, { status: 404 })
   return NextResponse.json(rs)
 }

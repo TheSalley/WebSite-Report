@@ -14,6 +14,8 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
     verifyCount: t.verifyCount ?? 0,
     error: t.error ?? null,
     pagespeed: t.pagespeedJson ? JSON.parse(t.pagespeedJson) : null,
+    pageSet: t.pageSetJson ? JSON.parse(t.pageSetJson) : null,
+    siteData: t.siteDataJson ? JSON.parse(t.siteDataJson) : null,
     site,
     ruleSet,
     progress: running

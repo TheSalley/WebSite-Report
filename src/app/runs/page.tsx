@@ -48,7 +48,6 @@ export default function RunsPage() {
   const [runningCount, setRunningCount] = React.useState(0)
   const shotFileRef = React.useRef<HTMLInputElement | null>(null)
   const shotStrategyRef = React.useRef<'mobile' | 'desktop'>('mobile')
-
   const loadAll = React.useCallback(async () => {
     try {
       const [t, s, rs] = await Promise.all([
@@ -81,7 +80,6 @@ export default function RunsPage() {
     let timer: ReturnType<typeof setTimeout> | undefined
     const tick = async () => {
       await loadAll()
-      if (!stopped) timer = setTimeout(tick, 3000)
     }
     void tick()
     return () => {
@@ -239,6 +237,22 @@ export default function RunsPage() {
 
   const reportUrl = selectedTask ? `/reports/${selectedTask.id}` : ''
   const filteredResults = results.filter((r) => statusFilter === 'all' || r.status === statusFilter)
+  const pageGroups = new Map<string, CheckResult[]>()
+  for (const r of filteredResults) {
+    const key = r.pageUrl || ''
+    const arr = pageGroups.get(key) ?? []
+    arr.push(r)
+    pageGroups.set(key, arr)
+  }
+  const pageLabel = (u: string) => {
+    if (!u) return '主页'
+    try {
+      const x = new URL(u)
+      return (x.hostname + (x.port ? ':' + x.port : '') + (x.pathname === '/' ? '' : x.pathname)).slice(0, 64)
+    } catch {
+      return u.slice(0, 64)
+    }
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
@@ -469,6 +483,43 @@ export default function RunsPage() {
           </div>
           <div className="mb-4 h-px bg-border" />
 
+          {selectedTask.pageSet && selectedTask.pageSet.representatives.length > 0 && (
+            <div className="glass mb-5 rounded-2xl p-4">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">检测页面</span>
+                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-foreground-muted dark:bg-zinc-800">
+                  {selectedTask.pageSet.representatives.length} 个代表页
+                </span>
+                <span className="text-xs text-foreground-subtle">
+                  模板去重自 {selectedTask.pageSet.candidateCount} 个候选 URL
+                  {typeof selectedTask.pageSet.locTotal === "number" && (
+                    <span className="ml-1">· sitemap 共 {selectedTask.pageSet.locTotal} 个 URL</span>
+                  )}
+                </span>
+              </div>
+              {selectedTask.pageSet.sitemaps.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5 text-xs">
+                  {selectedTask.pageSet.sitemaps.map((sm) => (
+                    <span key={sm} className="inline-flex max-w-full items-center gap-1 truncate rounded-md bg-zinc-100 px-2 py-1 font-mono text-[11px] text-foreground-muted dark:bg-zinc-800">
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{sm}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <ul className="space-y-1">
+                {selectedTask.pageSet.representatives.map((p) => (
+                  <li key={p.url} className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="min-w-0 flex-1 truncate font-mono text-foreground-muted">{p.url}</span>
+                    <span className="max-w-[45%] truncate rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-foreground-subtle dark:bg-zinc-800">
+                      {p.templateSignature || '—'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div>
             {/* 概览条 */}
             {!resultsLoading && results.length > 0 && (
@@ -528,7 +579,8 @@ export default function RunsPage() {
                   ))}
                 </div>
 
-                {/* PageSpeed 截图（支持替换） */}
+                {/* PageSpeed 截图（支持替换）：仅建站服务合同验收等含 PageSpeed 规则的任务展示 */}
+                {selectedTask.pagespeed && (
                 <div className="mb-4 grid gap-3 lg:grid-cols-2">
                   {(['mobile', 'desktop'] as const).map((strategy) => (
                     <div
@@ -566,9 +618,17 @@ export default function RunsPage() {
                     </div>
                   ))}
                 </div>
+                )}
 
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {filteredResults.map((r) => (
+                {Array.from(pageGroups.entries()).map(([purl, items]) => (
+                  <div key={purl || '__home__'} className="mb-4">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-medium text-foreground">{pageLabel(purl)}</span>
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-foreground-muted dark:bg-zinc-800">{items.length} 项</span>
+                      {purl && <span className="truncate text-foreground-subtle">{purl}</span>}
+                    </div>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      {items.map((r) => (
                     <div key={r.id} className="glass rounded-xl p-4 transition-shadow hover:shadow-md">
                       <div className="flex items-start justify-between gap-2">
                         <div>
@@ -613,6 +673,8 @@ export default function RunsPage() {
                     </div>
                   ))}
                 </div>
+                </div>
+              ))}
               </>
             )}
           </div>

@@ -27,6 +27,8 @@ export interface RuleSet {
   description: string
   isBuiltin: boolean
   parentId: number | null
+  /** 多页面模板检查：sitemap 枚举 + 模板去重，任务运行代表页 */
+  scanPages: boolean
   createdAt: string
   updatedAt: string
   ruleCount?: number
@@ -37,6 +39,7 @@ export interface RuleSetInput {
   description?: string
   isBuiltin?: boolean
   parentId?: number | null
+  scanPages?: boolean
 }
 
 /** 单条规则定义 */
@@ -50,6 +53,8 @@ export interface Rule {
   /** 交付成果文案（报告「交付成果」列；留空显示状态徽章） */
   deliverable?: string
   description?: string
+  /** 执行范围：'site' 站点级（整站仅执行一次）| 'page' 页面级（每个代表页执行，默认） */
+  scope?: 'page' | 'site'
   params: Record<string, unknown>
   sortOrder: number
 }
@@ -61,6 +66,24 @@ export interface RuleInput {
   enabled?: boolean
   params?: Record<string, unknown>
   sortOrder?: number
+}
+
+/** 检测页面集：单个代表页 */
+export interface TaskPageSetPage {
+  url: string
+  templateSignature: string
+}
+
+/** 检测页面集合（sitemap 枚举 + 模板去重结果） */
+export interface TaskPageSet {
+  /** 枚举到的 sitemap URL */
+  sitemaps: string[]
+  /** 候选页总数（含主页） */
+  candidateCount: number
+  /** sitemap 中提取到的全部 URL 总数 */
+  locTotal: number
+  /** 去重后的代表页（主页优先） */
+  representatives: TaskPageSetPage[]
 }
 
 /** 检测任务 */
@@ -83,6 +106,10 @@ export interface Task {
   ruleSet?: RuleSet
   /** PageSpeed 评分结果（任务执行时采集，可能为 null） */
   pagespeed?: PageSpeedReportData | null
+  /** 检测页面集合（sitemap 枚举 + 模板去重结果，多页面任务才有） */
+  pageSet?: TaskPageSet | null
+  /** 站点级规则的结构化数据（按 ruleKey，如交付检查逐页明细，报告按页面表格使用） */
+  siteData?: Record<string, unknown> | null
 }
 
 export interface TaskInput {
@@ -98,6 +125,8 @@ export interface CheckResult {
   ruleKey: string
   ruleName: string
   groupName: string
+  /** 检测页面 URL（多页面任务按页面分组；旧单页任务为空） */
+  pageUrl: string
   status: CheckStatus
   /** 交付成果文案（预留来自规则的预设/自定义） */
   deliverable?: string

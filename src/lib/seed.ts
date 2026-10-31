@@ -1,5 +1,5 @@
 
-/** 内置规则集种子数据：建站服务合同验收 */
+/** 内置规则集种子数据：建站服务合同验收 + 网站交付检查 */
 
 const GROUP_PLAN = '网站规划'
 const GROUP_BUILD = '网站建设'
@@ -7,6 +7,9 @@ const GROUP_OPTIMIZE = '功能与优化'
 const GROUP_ADMIN = '后台管理'
 const GROUP_CONTENT_FILL = '图文内容'
 const GROUP_SUPPORT = '售后支持'
+const GROUP_DELIVERY_PAGE = '页面基础'
+const GROUP_DELIVERY_ELEMENTOR = 'Elementor 板块'
+const GROUP_DELIVERY_SITE = '站点基础'
 
 interface SeedRule {
   groupName: string
@@ -15,6 +18,8 @@ interface SeedRule {
   description?: string
   /** 交付成果文案（可留空，自动用预设） */
   deliverable?: string
+  /** 执行范围：'site' 站点级（整站仅执行一次）| 'page' 页面级（默认） */
+  scope?: 'page' | 'site'
   params?: Record<string, unknown>
 }
 
@@ -42,6 +47,7 @@ const contractRuleDefs: SeedRule[] = [
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.meta.description', name: 'SEO：meta description 存在', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.robots.txt', name: 'SEO：robots.txt 可访问', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.sitemap.xml', name: 'SEO：sitemap.xml 可访问', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'perf.pagespeed.score', name: 'PageSpeed 评分（性能≥90 达标）', description: 'Google PageSpeed 移动端/桌面端性能评分，≥90 为优秀、50~89 需优化、<50 不达标', scope: 'site' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.h1.exists', name: 'SEO：唯一 h1 标题', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.html', name: 'HTML 优化（URL/Title/H1/Alt/Meta 自定义）', description: '支持自定义URL、Title、H1、图片Alt和Meta描述' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.server', name: '基础 AWS 海外服务器（2vCPU/8GB/20GB）', description: '配置2vCPU+8GB内存+20GB空间，支持最多100个产品' },
@@ -73,10 +79,18 @@ const contractRuleDefs: SeedRule[] = [
   { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.source', name: '免费提供源代码（1 次）', description: '网站上线后免费打包移交源码一次，不含部署' },
 ]
 
+/** 网站交付检查规则：交付前质量检查，全部由引擎自动检测 */
+const deliveryRuleDefs: SeedRule[] = [
+  { groupName: GROUP_DELIVERY_SITE, ruleKey: 'delivery.sitemap', name: 'Sitemap 检查（robots 声明/可访问/有效）', scope: 'site' },
+  { groupName: GROUP_DELIVERY_PAGE, ruleKey: 'delivery.h1.count', name: 'H1 标签检查（全站页面汇总）', scope: 'site' },
+  { groupName: GROUP_DELIVERY_ELEMENTOR, ruleKey: 'delivery.elementor.hidden-both', name: 'Elementor 隐藏板块检查（全站页面汇总）', scope: 'site' }
+]
 /** 内置规则集定义 */
 export interface BuiltinRuleSetDef {
   name: string
   description: string
+  /** 多页面模板检查：网站交付检查专属（内置默认开启）；建站服务合同验收不启用（内置固定关闭，init 时与 DB 对齐） */
+  scanPages?: boolean
   rules: SeedRule[]
 }
 
@@ -84,7 +98,14 @@ export const BUILTIN_RULE_SETS: BuiltinRuleSetDef[] = [
   {
     name: '建站服务合同验收',
     description: "按建站服务合同 6 大板块（网站规划/网站建设/功能与优化/后台管理/图文内容/售后支持）逐项验收；可自动检测项由浏览器引擎验证，人工交付项标记为「待验收」。",
+    scanPages: false,
     rules: contractRuleDefs
+  },
+  {
+    name: '网站交付检查',
+    description: '网站交付前的质量检查：验证代表页面 H1 标题存在且唯一，扫描 Elementor 板块是否残留同时隐藏于桌面与移动端的元素；默认按 sitemap 枚举整站页面并按模板去重（新闻/产品等模板页只测代表页）。',
+    scanPages: true,
+    rules: deliveryRuleDefs
   }
 ]
 
@@ -114,6 +135,7 @@ export function toRuleRows(
     enabled: true,
     description: r.description,
     deliverable: r.deliverable && r.deliverable.trim() ? r.deliverable : DELIVERABLE_PRESETS[r.ruleKey] ?? '',
+    scope: r.scope ?? 'page',
     params: r.params ?? {},
     sortOrder: idx
   }))
@@ -126,6 +148,7 @@ export function getRuleCatalog(): {
   name: string
   description?: string
   deliverable?: string
+  scope?: 'page' | 'site'
   params: Record<string, unknown>
 }[] {
   const seen = new Set<string>()
@@ -135,6 +158,7 @@ export function getRuleCatalog(): {
     name: string
     description?: string
     deliverable?: string
+    scope?: 'page' | 'site'
     params: Record<string, unknown>
   }[] = []
   for (const def of BUILTIN_RULE_SETS) {
@@ -147,6 +171,7 @@ export function getRuleCatalog(): {
         name: seed.name,
         description: seed.description,
         deliverable: seed.deliverable && seed.deliverable.trim() ? seed.deliverable : DELIVERABLE_PRESETS[seed.ruleKey] ?? '',
+        scope: seed.scope ?? 'page',
         params: seed.params ?? {}
       })
     }
@@ -196,7 +221,11 @@ export const DELIVERABLE_PRESETS: Record<string, string> = {
   'verify.support.training': '已交付后台培训与操作手册 1 份',
   'verify.support.content': '提供上线内容技术支持',
   'verify.support.rollback': '提供免费数据回滚 1 次',
-  'verify.support.source': '提供免费源代码移交 1 次'
+  'verify.support.source': '提供免费源代码移交 1 次',
+  'delivery.sitemap': '已配置并提交站点地图（robots.txt 声明 Sitemap 且可访问、非空）',
+  'delivery.h1.count': '每页 H1 标签唯一且已设置',
+  'perf.pagespeed.score': 'PageSpeed 性能评分达标（≥90）',
+  'delivery.elementor.hidden-both': '已清理同时隐藏于桌面与移动端的 Elementor 板块'
 }
 
 /** 获取规则预设交付成果文案（无预设返回空串） */

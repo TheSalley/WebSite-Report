@@ -55,12 +55,28 @@ export async function captureSnapshot(page: Page): Promise<PageSnapshot> {
         .map((a) => a.getAttribute('href') || '')
         .filter((h) => h && !h.startsWith('#') && !h.startsWith('javascript:'))
 
+      const elementorHiddenBoth = Array.from(
+        document.querySelectorAll('.elementor-hidden-desktop.elementor-hidden-mobile')
+      ).map((el) => ({
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        classes: Array.from(el.classList)
+          .filter((c) => c.startsWith('elementor-'))
+          .join(' '),
+        text: (el.textContent ?? '').trim().slice(0, 60)
+      }))
+      const templateClasses = Array.from(document.body.classList)
+        .filter((c) => c && !/^(?:(?:postid|attachment|product-id|page|post)-\d+|(?:category|tag|term|tax)-|slug-)/.test(c))
+        .sort()
+      const templateSignature = templateClasses.length ? templateClasses.join(' ') : 'body'
       return {
         title: document.title,
         metas,
         links,
         ogTags,
         h1s,
+        elementorHiddenBoth,
+        templateSignature,
         allHrefs,
         bodyText: text(document.body),
         hasViewport: !!document.querySelector('meta[name="viewport"]'),
@@ -73,6 +89,8 @@ export async function captureSnapshot(page: Page): Promise<PageSnapshot> {
       links: {},
       ogTags: {},
       h1s: [],
+      elementorHiddenBoth: [],
+      templateSignature: '',
       allHrefs: [],
       bodyText: '',
       hasViewport: false,
@@ -98,6 +116,8 @@ export async function captureSnapshot(page: Page): Promise<PageSnapshot> {
     links: dom.links,
     ogTags: dom.ogTags,
     h1s: dom.h1s,
+    elementorHiddenBoth: dom.elementorHiddenBoth,
+    templateSignature: dom.templateSignature,
     allHrefs: dom.allHrefs,
     bodyText: dom.bodyText,
     hasViewport: dom.hasViewport,
