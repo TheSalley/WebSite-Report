@@ -48,6 +48,9 @@ export default function RunsPage() {
   const [runningCount, setRunningCount] = React.useState(0)
   const shotFileRef = React.useRef<HTMLInputElement | null>(null)
   const shotStrategyRef = React.useRef<'mobile' | 'desktop'>('mobile')
+  /** 当前运行中任务数（ref 版，供轮询调度判断） */
+  const runningRef = React.useRef(0)
+
   const loadAll = React.useCallback(async () => {
     try {
       const [t, s, rs] = await Promise.all([
@@ -58,6 +61,7 @@ export default function RunsPage() {
       setTasks(t.items)
       setTotal(t.total)
       setRunningCount(t.running)
+      runningRef.current = t.running
       // 当前页超出总页数（如删除后）时回退到最后一页
       const totalPages = Math.max(1, Math.ceil(t.total / pageSize))
       if (page > totalPages && totalPages > 0) {
@@ -80,6 +84,8 @@ export default function RunsPage() {
     let timer: ReturnType<typeof setTimeout> | undefined
     const tick = async () => {
       await loadAll()
+      // 仅在有任务运行中时持续轮询（3s）；空闲时只加载一次，避免无谓请求
+      if (!stopped && runningRef.current > 0) timer = setTimeout(tick, 3000)
     }
     void tick()
     return () => {
@@ -105,6 +111,8 @@ export default function RunsPage() {
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? '启动失败')
       setStartOpen(false)
+      // 启动后恢复轮询直到任务结束
+      runningRef.current += 1
       loadAll()
     } catch (e) {
       setError((e as Error).message)

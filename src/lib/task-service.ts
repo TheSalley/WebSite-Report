@@ -20,6 +20,7 @@ import {
   updateCheckResultDeliverable,
   updateCheckResultStatus,
   listCheckResults,
+  recoverStaleRunningTasks,
   deleteTask
 } from './store'
 import type { RuleRow } from './store'
@@ -41,6 +42,14 @@ const runningTasks = new Map<number, RunningTaskState>()
 
 export function getRunningState(taskId: number): RunningTaskState | null {
   return runningTasks.get(taskId) ?? null
+}
+
+/**
+ * 服务重启恢复：把 DB 中遗留 running 但本进程未在跑的任务标记为「中断」，
+ * 防止进程崩溃/重启后任务永远显示「运行中」。在应用入口（initData）调用，幂等。
+ */
+export async function recoverInterruptedTasks(): Promise<number> {
+  return recoverStaleRunningTasks(Array.from(runningTasks.keys()))
 }
 
 /**

@@ -1,6 +1,7 @@
 import { DATA_DIR, listRuleSets, createRuleSet, listRules, listRulesForSet, replaceRules, updateRuleSet } from './store'
 import { BUILTIN_RULE_SETS, DELIVERABLE_PRESETS, toRuleRows } from './seed'
 import { logInfo } from './logger'
+import { recoverInterruptedTasks } from './task-service'
 import { mkdir } from 'fs/promises'
 import { join } from 'path'
 
@@ -12,6 +13,9 @@ import { join } from 'path'
 export async function initData(): Promise<void> {
   await mkdir(join(DATA_DIR, 'json'), { recursive: true })
   await mkdir(join(DATA_DIR, 'screenshots'), { recursive: true })
+
+  // 服务重启恢复：遗留 running 且本进程未在跑的任务标记为中断，避免永远显示「运行中」
+  await recoverInterruptedTasks()
 
   const existing = new Set((await listRuleSets()).map((rs) => rs.name))
   const rules = await listRules()

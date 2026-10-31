@@ -40,7 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# sqlite database
-web-report-data/*.db
-web-report-data/*.db-shm
-web-report-data/*.db-wal
+# runtime data (sqlite db / logs / screenshots / legacy json)
+web-report-data/

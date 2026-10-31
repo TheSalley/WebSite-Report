@@ -655,6 +655,24 @@ export async function deleteTask(id: number): Promise<void> {
   }
 }
 
+/** 启动恢复：把遗留 running 但不在 activeIds（本进程正在运行）中的任务标记为「中断」（进程崩溃/重启后避免永远显示运行中） */
+export async function recoverStaleRunningTasks(activeIds: number[]): Promise<number> {
+  const sqlite = getDb()
+  const ts = now()
+  let res
+  if (activeIds.length === 0) {
+    res = sqlite
+      .prepare("UPDATE tasks SET status='failed', error='服务重启导致任务中断', finishedAt=? WHERE status='running'")
+      .run(ts)
+  } else {
+    const ph = activeIds.map(() => '?').join(',')
+    res = sqlite
+      .prepare(`UPDATE tasks SET status='failed', error='服务重启导致任务中断', finishedAt=? WHERE status='running' AND id NOT IN (${ph})`)
+      .run(ts, ...activeIds)
+  }
+  return Number(res.changes)
+}
+
 // ── 检测结果 ──
 
 export async function listCheckResults(taskId: number): Promise<CheckResultRow[]> {
