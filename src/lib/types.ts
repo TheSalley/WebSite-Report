@@ -1,6 +1,3 @@
-/** 严重级别：必须 / 警告 / 建议 */
-export type Severity = 'critical' | 'warning' | 'suggest'
-
 /** 单条检测项结果状态 */
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'skip' | 'verify'
 
@@ -49,8 +46,10 @@ export interface Rule {
   groupName: string
   ruleKey: string
   name: string
-  severity: Severity
   enabled: boolean
+  /** 交付成果文案（报告「交付成果」列；留空显示状态徽章） */
+  deliverable?: string
+  description?: string
   params: Record<string, unknown>
   sortOrder: number
 }
@@ -59,7 +58,6 @@ export interface RuleInput {
   groupName: string
   ruleKey: string
   name: string
-  severity: Severity
   enabled?: boolean
   params?: Record<string, unknown>
   sortOrder?: number
@@ -79,6 +77,8 @@ export interface Task {
   verifyCount?: number
   startedAt: string | null
   finishedAt: string | null
+  /** 失败原因（任务 failed 时由引擎写入） */
+  error?: string | null
   site?: Site
   ruleSet?: RuleSet
   /** PageSpeed 评分结果（任务执行时采集，可能为 null） */
@@ -98,8 +98,9 @@ export interface CheckResult {
   ruleKey: string
   ruleName: string
   groupName: string
-  severity: Severity
   status: CheckStatus
+  /** 交付成果文案（预留来自规则的预设/自定义） */
+  deliverable?: string
   actualValue: string
   expectedValue: string
   description: string
@@ -113,7 +114,6 @@ export interface ReportSettings {
   companyName: string
   logoPath: string
   reportTitle: string
-  showConclusionPage: boolean
   footerText: string
   /** 可选：Google PageSpeed 接口 Key（留空用本地 Lighthouse） */
   psiApiKey: string
@@ -121,9 +121,8 @@ export interface ReportSettings {
 
 export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
   companyName: '',
-  logoPath: '',
+  logoPath: '/logo.svg',
   reportTitle: '网站合规性检测报告',
-  showConclusionPage: true,
   footerText: '本报告由网站合规性检测工具自动生成',
   psiApiKey: ''
 }
@@ -161,3 +160,4 @@ export interface PageSpeedReportData {
   /** 整体失败说明（如 URL 无效） */
   error?: string
 }
+

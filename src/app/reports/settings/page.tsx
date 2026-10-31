@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { Settings, Save, ImageIcon, Trash2 } from 'lucide-react'
-import { Button, Card, Dialog, Input, Label, Switch } from '@/components/ui'
+import { Button, Card, Dialog, Input, Label } from '@/components/ui'
 import type { ReportSettings } from '@/lib/types'
 
 export default function ReportSettingsPage() {
@@ -55,7 +55,7 @@ export default function ReportSettingsPage() {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-border bg-zinc-50/60 px-5 py-3.5 dark:bg-zinc-800/20">
+        <div className="flex items-center gap-2 border-b border-border/60 bg-white/40 px-5 py-3.5 dark:bg-white/[0.04]">
           <Settings className="h-4 w-4 text-primary" />
           <h2 className="text-base font-semibold">报告模板</h2>
         </div>
@@ -79,7 +79,7 @@ export default function ReportSettingsPage() {
                 <img
                   src={settings.logoPath.startsWith('data:') ? settings.logoPath : settings.logoPath}
                   alt="logo"
-                  className="h-10 rounded-md border border-border object-contain"
+                  className="h-10 rounded-md border border-border object-contain px-2 py-1"
                 />
               ) : (
                 <span className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-border-strong text-foreground-subtle">
@@ -97,18 +97,11 @@ export default function ReportSettingsPage() {
             </div>
             <p className="text-xs text-foreground-subtle">PNG/JPG，建议不超过 200KB；嵌入报告内。</p>
           </div>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-zinc-50/50 px-4 py-3 dark:bg-zinc-800/20">
-            <div>
-              <Label>显示结论页</Label>
-              <p className="mt-0.5 text-xs text-foreground-subtle">在报告末尾输出检测结论。</p>
-            </div>
-            <Switch checked={settings.showConclusionPage} onCheckedChange={(v) => setSettings({ ...settings, showConclusionPage: v })} />
-          </div>
         </div>
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="border-b border-border bg-zinc-50/60 px-5 py-3.5 dark:bg-zinc-800/20">
+        <div className="border-b border-border/60 bg-white/40 px-5 py-3.5 dark:bg-white/[0.04]">
           <h2 className="text-base font-semibold">PageSpeed 评分</h2>
         </div>
         <div className="space-y-5 px-5 py-5">

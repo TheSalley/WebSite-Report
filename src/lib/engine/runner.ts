@@ -7,11 +7,12 @@ import { computeScore, type ScoreResult } from './scoring'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { RuleContext, RuleOutcome } from './types'
-import type { CheckStatus, Severity } from '../types'
+import type { CheckStatus } from '../types'
+import { logInfo, logWarn, logError } from '../logger'
 
 export interface RunTaskOptions {
   url: string
-  rules: { id: number; ruleKey: string; name: string; groupName: string; severity: Severity; enabled: boolean; params: Record<string, unknown> }[]
+  rules: { id: number; ruleKey: string; name: string; groupName: string; enabled: boolean; description?: string; deliverable?: string; params: Record<string, unknown> }[]
   taskId: number
   /** 截图根目录（默认临时目录 web-report-screenshots） */
   screenshotBaseDir?: string
@@ -27,11 +28,12 @@ export interface RunRuleResult {
   ruleKey: string
   ruleName: string
   groupName: string
-  severity: Severity
   status: CheckStatus
   actualValue: string
   expectedValue: string
   description: string
+  /** 交付成果文案（预设/自定义） */
+  deliverable: string
   screenshotPath: string | null
   note: string
 }
@@ -56,12 +58,17 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
   const total = enabledRules.length
   let done = 0
 
+  logInfo(`开始检测任务 taskId=${taskId} url=${url} 启用规则数=${enabledRules.length}`, taskId)
   const baseDir = options.screenshotBaseDir ?? join(tmpdir(), 'web-report-screenshots')
   const screenshotManager = new ScreenshotManager(taskId, baseDir)
   const page = await newPage()
   attachNetworkCollector(page)
 
   const results: RunRuleResult[] = []
+
+  /** 结果说明：优先取规则配置的 description（合同条款），否则用引擎动态描述 */
+  const desc = (rule: RunTaskOptions['rules'][number], fallback: string): string =>
+    rule.description && rule.description.trim() ? rule.description.trim() : fallback
 
   try {
     // 加载页面
@@ -72,16 +79,17 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
     } catch (e) {
       // 页面加载失败：全部规则标记为未执行，另加一条任务级失败说明
       const msg = (e as Error).message.slice(0, 200)
+      logError('页面加载失败', e, taskId)
       results.push({
         ruleId: null,
         ruleKey: 'task.page_load',
         ruleName: '页面加载',
         groupName: '任务',
-        severity: 'critical',
         status: 'fail',
         actualValue: '加载失败',
         expectedValue: '页面可访问',
         description: msg,
+        deliverable: '',
         screenshotPath: null,
         note: ''
       })
@@ -91,16 +99,16 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           ruleKey: rule.ruleKey,
           ruleName: rule.name,
           groupName: rule.groupName,
-          severity: rule.severity,
           status: 'skip',
           actualValue: '',
           expectedValue: '',
           description: '页面加载失败，未执行',
+          deliverable: rule.deliverable ?? '',
           screenshotPath: null,
           note: ''
         })
       }
-      const score = computeScore(results.map((r) => ({ status: r.status, severity: r.severity })))
+      const score = computeScore(results.map((r) => ({ status: r.status })))
       return { results, score }
     }
 
@@ -116,35 +124,52 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
 
     // 逐条执行规则
     for (const rule of enabledRules) {
-      if (options.signal?.cancelled) break
+      if (options.signal?.cancelled) {
+        logWarn(`任务取消信号已置位，终止于 ${rule.ruleKey}`, taskId)
+        break
+      }
+      logInfo(`执行规则 ${rule.ruleKey}（${rule.name}）`, taskId)
 
       const handler = getRuleHandler(rule.ruleKey)
       ctx.params = rule.params ?? {}
       ctx.ruleKey = rule.ruleKey
 
-      let outcome: RuleOutcome = rule.ruleKey.startsWith('verify.')
-        ? {
-            status: 'verify',
-            actual: '待人工验收',
-            expected: '按合同约定完成并确认',
-            description: '人工交付项，需验收人员确认后更新状态'
-          }
-        : {
-            status: 'fail',
-            actual: '',
-            expected: '',
-            description: '规则未实现'
-          }
+      let outcome: RuleOutcome
+      if (rule.params?.defaultPass === true) {
+        // 规则配置为「默认通过」：跳过实际检测，直接按通过计
+        outcome = {
+          status: 'pass',
+          actual: '默认通过（规则已配置为直接通过）',
+          expected: '按合同约定完成并确认',
+          description: '该规则已配置为默认通过，无需实际检测'
+        }
+      } else {
+        outcome = rule.ruleKey.startsWith('verify.')
+          ? {
+              status: 'verify',
+              actual: '待人工验收',
+              expected: '按合同约定完成并确认',
+              description: '人工交付项，需验收人员确认后更新状态'
+            }
+          : {
+              status: 'fail',
+              actual: '',
+              expected: '',
+              description: '规则未实现'
+            }
 
-      if (handler) {
-        try {
-          outcome = await handler(ctx)
-        } catch (e) {
-          outcome = {
-            status: 'fail',
-            actual: (e as Error).message.slice(0, 120),
-            expected: '规则执行成功',
-            description: `规则执行异常: ${(e as Error).message.slice(0, 80)}`
+        // 非 verify 规则且有处理器：执行实际检测（defaultPass 时不进入这里）
+        if (handler && outcome.status === 'fail') {
+          try {
+            outcome = await handler(ctx)
+          } catch (e) {
+            logError(`规则 ${rule.ruleKey} 执行异常`, e, taskId)
+            outcome = {
+              status: 'fail',
+              actual: (e as Error).message.slice(0, 120),
+              expected: '规则执行成功',
+              description: `规则执行异常: ${(e as Error).message.slice(0, 80)}`
+            }
           }
         }
       }
@@ -160,11 +185,11 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
         ruleKey: rule.ruleKey,
         ruleName: rule.name,
         groupName: rule.groupName,
-        severity: rule.severity,
         status: outcome.status,
         actualValue: outcome.actual,
         expectedValue: outcome.expected,
-        description: outcome.description,
+        description: desc(rule, outcome.description),
+        deliverable: rule.deliverable ?? '',
         screenshotPath,
         note: ''
       })
@@ -180,18 +205,19 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           ruleKey: rule.ruleKey,
           ruleName: rule.name,
           groupName: rule.groupName,
-          severity: rule.severity,
           status: 'skip',
           actualValue: '',
           expectedValue: '',
           description: '任务已取消',
+          deliverable: rule.deliverable ?? '',
           screenshotPath: null,
           note: ''
         })
       }
     }
 
-    const score = computeScore(results.map((r) => ({ status: r.status, severity: r.severity })))
+    logInfo(`检测完成，规则结果数=${results.length}`, taskId)
+    const score = computeScore(results.map((r) => ({ status: r.status })))
     return { results, score }
   } finally {
     await page.context().close().catch(() => undefined)

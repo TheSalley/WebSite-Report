@@ -2,12 +2,10 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { DATA_DIR, getTask, getSite, getRuleSet, listCheckResults } from '../store'
 import { getReportSettings } from '../settings'
+import { DELIVERABLE_PRESETS } from '../seed'
 import { getBrowser } from '../engine/browser'
 
 import type { CheckResult, ReportSettings, Site, RuleSet, Task } from '../types'
-
-/** 报告结论 */
-export type ReportConclusion = 'pass' | 'warn' | 'fail'
 
 /** 报告数据（含截图 dataURL） */
 export interface ReportData {
@@ -22,12 +20,44 @@ export interface ReportData {
   failCount: number
   skipCount: number
   verifyCount: number
-  conclusion: ReportConclusion
   settings: ReportSettings
   /** PageSpeed 评分（任务可能没有，为 null） */
   pagespeed: import('../types').PageSpeedReportData | null
   /** PageSpeed 页面截图（移动端/桌面端 dataURL） */
   pagespeedShots: { strategy: string; dataUrl: string | null }[]
+}
+
+/** ISO 时间 → 本地可读时间（YYYY-MM-DD HH:mm），空值/异常显示 — */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+const LOGO_MIME: Record<string, string> = {
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+}
+
+/** 将报告 LOGO 配置解析为内嵌 data URL（支持 data:、public 路径、绝对路径） */
+async function resolveLogoDataUrl(logoPath: string): Promise<string | null> {
+  if (!logoPath) return null
+  if (logoPath.startsWith('data:')) return logoPath
+  try {
+    const full = logoPath.startsWith('/') ? join(process.cwd(), 'public', logoPath) : logoPath
+    const buffer = await readFile(full)
+    const ext = (logoPath.toLowerCase().match(/(\.[a-z0-9]+)(?:\?|$)/) ?? [])[1] ?? '.png'
+    const mime = LOGO_MIME[ext] ?? 'image/png'
+    return `data:${mime};base64,${buffer.toString('base64')}`
+  } catch {
+    return null
+  }
 }
 
 /** HTML 转义，防 XSS */
@@ -40,16 +70,31 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;')
 }
 
-const SEVERITY_TEXT: Record<string, string> = {
-  critical: '必须',
-  warning: '警告',
-  suggest: '建议'
-}
+/** 常见状态 emoji → 内联 SVG（服务器缺 emoji 字体时 PDF/打印也能正确显示） */
+const EMOJI_SVG: ReadonlyArray<readonly [string, string]> = [
+  ['✅', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="通过"><circle cx="12" cy="12" r="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/><path d="m8 12.4 2.6 2.6L16.2 9.6" fill="none" stroke="#16a34a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['❌', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="失败"><circle cx="12" cy="12" r="10" fill="#fee2e2" stroke="#dc2626" stroke-width="1.6"/><path d="m9 9 6 6M15 9l-6 6" stroke="#dc2626" stroke-width="2.4" stroke-linecap="round"/></svg>'],
+  ['⚠️', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="警告"><path d="M12 3 2.5 20h19L12 3Z" fill="#fef3c7" stroke="#d97706" stroke-width="1.8" stroke-linejoin="round"/><line x1="12" y1="9.4" x2="12" y2="14" stroke="#d97706" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.3" fill="#d97706"/></svg>'],
+  ['⚠', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="警告"><path d="M12 3 2.5 20h19L12 3Z" fill="#fef3c7" stroke="#d97706" stroke-width="1.8" stroke-linejoin="round"/><line x1="12" y1="9.4" x2="12" y2="14" stroke="#d97706" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.3" fill="#d97706"/></svg>'],
+  ['✔️', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="通过"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="#16a34a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['✔', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="通过"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="#16a34a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['✓', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="通过"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="#16a34a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['✗', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="失败"><path d="m6 6 12 12M18 6 6 18" stroke="#dc2626" stroke-width="2.8" stroke-linecap="round"/></svg>'],
+  ['☑️', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="已勾选"><rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/><path d="m8 12.4 2.6 2.6L16.2 9.6" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['☑', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="已勾选"><rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8"/><path d="m8 12.4 2.6 2.6L16.2 9.6" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
+  ['🟢', '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="正常"><circle cx="12" cy="12" r="10" fill="#22c55e"/></svg>'],
+  ['🔴', '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="异常"><circle cx="12" cy="12" r="10" fill="#ef4444"/></svg>'],
+  ['🟡', '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="提醒"><circle cx="12" cy="12" r="10" fill="#eab308"/></svg>']
+]
 
-const CONCLUSION_TEXT: Record<ReportConclusion, string> = {
-  pass: '通过',
-  warn: '有条件通过',
-  fail: '不通过'
+/** 转义 HTML 并把常见 emoji 替换为内联 SVG（网页与 PDF 显示一致，不依赖服务器 emoji 字体） */
+function safeReportText(raw: string | null | undefined): string {
+  if (!raw) return ''
+  let out = escapeHtml(raw)
+  for (const [emoji, svg] of EMOJI_SVG) {
+    out = out.split(emoji).join(svg)
+  }
+  return out
 }
 
 /** 读取截图文件并转为 data URL */
@@ -82,6 +127,15 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
   const site = (await getSite(rawTask.siteId))!
   const ruleSet = (await getRuleSet(rawTask.ruleSetId))!
 
+  const pagespeedRaw = rawTask.pagespeedJson ? JSON.parse(rawTask.pagespeedJson) as { fetchedAt?: string } : null
+  // 完成时间应包含 PageSpeed 采集耗时：取 max(任务收尾时间, PageSpeed 采集完成时间)
+  let finishedAt = rawTask.finishedAt
+  if (pagespeedRaw?.fetchedAt) {
+    const a = rawTask.finishedAt ? new Date(rawTask.finishedAt).getTime() : 0
+    const b = new Date(pagespeedRaw.fetchedAt).getTime()
+    if (!isNaN(b) && (b > a || a === 0)) finishedAt = pagespeedRaw.fetchedAt
+  }
+
   const task: Task = {
     id: rawTask.id,
     siteId: rawTask.siteId,
@@ -93,7 +147,7 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     failCount: rawTask.failCount,
     skipCount: rawTask.skipCount,
     startedAt: rawTask.startedAt,
-    finishedAt: rawTask.finishedAt,
+    finishedAt: finishedAt,
     site,
     ruleSet,
     pagespeed: rawTask.pagespeedJson ? JSON.parse(rawTask.pagespeedJson) : null
@@ -108,11 +162,11 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
       ruleKey: r.ruleKey,
       ruleName: r.ruleName,
       groupName: r.groupName,
-      severity: r.severity,
       status: r.status,
       actualValue: r.actualValue,
       expectedValue: r.expectedValue,
       description: r.description,
+      deliverable: (r.deliverable && r.deliverable.trim() ? r.deliverable : DELIVERABLE_PRESETS[r.ruleKey] ?? ''),
       screenshotPath: r.screenshotPath,
       note: r.note,
       checkedAt: r.checkedAt,
@@ -126,9 +180,6 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
   const skipCount = results.filter((r) => r.status === 'skip').length
   const verifyCount = results.filter((r) => r.status === 'verify').length
 
-  const criticalFailed = results.some((r) => r.status === 'fail' && r.severity === 'critical')
-  const conclusion: ReportConclusion = criticalFailed ? 'fail' : warnCount > 0 || failCount > 0 ? 'warn' : 'pass'
-
   return {
     task,
     site,
@@ -141,7 +192,6 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     failCount,
     skipCount,
     verifyCount,
-    conclusion,
     settings: await getReportSettings(),
     pagespeed: task.pagespeed ?? null,
     pagespeedShots: await readPagespeedShots(taskId)
@@ -152,7 +202,7 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
 function statusBadgeHtml(status: string): string {
   const map: Record<string, { text: string; cls: string }> = {
     pass: { text: '通过', cls: 'pass' },
-    warn: { text: '警告', cls: 'warn' },
+    warn: { text: '通过', cls: 'pass' },
     fail: { text: '失败', cls: 'fail' },
     skip: { text: '跳过', cls: 'skip' },
     verify: { text: '待验收', cls: 'verify' }
@@ -170,7 +220,7 @@ export async function buildReportPdf(taskId: number): Promise<Buffer> {
 <meta charset="UTF-8" />
 <title>${escapeHtml(data.settings.reportTitle || '网站合规性检测报告')}</title>
 </head>
-<body>${buildReportHtml(data)}</body>
+<body>${await buildReportHtml(data)}</body>
 </html>`
   const browser = await getBrowser()
   const page = await browser.newPage()
@@ -192,14 +242,13 @@ export async function buildReportPdf(taskId: number): Promise<Buffer> {
 }
 
 /** 生成报告 HTML —— 合同式表格版式（可打印为 PDF） */
-export function buildReportHtml(data: ReportData): string {
-  const { site, ruleSet, results, score, passCount, warnCount, failCount, skipCount, verifyCount, conclusion, generatedAt, settings, pagespeedShots } = data
+export async function buildReportHtml(data: ReportData): Promise<string> {
+  const { site, ruleSet, results, generatedAt, settings, pagespeedShots } = data
   const task = data.task
   const CN = ['一','二','三','四','五','六','七','八','九','十']
   let sectionNo = 3
   const sectionTitle = (title: string) => { const no = sectionNo++; return `<h2 class="section-title">${CN[no - 1] ?? no}、${title}</h2>` }
-  const conclusionColor = conclusion === 'pass' ? '#15803d' : conclusion === 'warn' ? '#b45309' : '#b91c1c'
-  const scoreColor = score >= 90 ? '#15803d' : score >= 70 ? '#b45309' : '#b91c1c'
+  const logoDataUrl = settings.logoPath ? await resolveLogoDataUrl(settings.logoPath) : null
 
   // 按分组聚合（保持检测顺序）
   const groups = new Map<string, (typeof data.results)[number][]>()
@@ -218,60 +267,20 @@ export function buildReportHtml(data: ReportData): string {
             idx === 0
               ? `<td rowspan="${groupResults.length}" class="group-cell">${escapeHtml(groupName)}<span class="group-count">${groupResults.length} 项</span></td>`
               : ''
-          const noteHtml = r.note ? `<div class="note">复核备注：${escapeHtml(r.note)}</div>` : ''
+          const noteHtml = r.note ? `<div class="note">备注：${safeReportText(r.note)}</div>` : ''
           const descParts: string[] = []
-          if (r.expectedValue) descParts.push(`<span class="desc-label">期望：</span>${escapeHtml(r.expectedValue)}`)
-          if (r.description) descParts.push(escapeHtml(r.description))
+          if (r.description) descParts.push(safeReportText(r.description))
           const descHtml = descParts.join('；')
           return `<tr>
             ${firstCell}
             <td class="item-cell"><div class="item-name">${escapeHtml(r.ruleName)}</div></td>
             <td class="desc-cell">${descHtml}${noteHtml}</td>
-            <td class="deliver-cell">${statusBadgeHtml(r.status)}</td>
+            <td class="deliver-cell">${r.deliverable && r.deliverable.trim() ? `<span class="deliver-text">${safeReportText(r.deliverable)}</span>` : statusBadgeHtml(r.status)}</td>
           </tr>`
         })
         .join('')
     )
     .join('')
-
-  // ── PageSpeed 表（合同式）──
-  const pagespeedSection = (() => {
-    const ps = data.pagespeed
-    if (!ps) return ''
-    const rows: string[] = []
-    for (const strategy of ['mobile', 'desktop'] as const) {
-      const psItem = strategy === 'mobile' ? ps.mobile : ps.desktop
-      if (!psItem) continue
-      const title = strategy === 'mobile' ? '移动端' : '桌面端'
-      if (!psItem.ok) {
-        rows.push(`<tr><td class="group-cell">${title}</td><td colspan="2" class="ps-error">${escapeHtml(psItem.error ?? '获取失败')}</td></tr>`)
-        continue
-      }
-      const cats = (psItem.categories ?? [])
-        .map((cat) => { const sc = cat.score ?? 0; const color = sc >= 90 ? '#16a34a' : sc >= 50 ? '#d97706' : '#dc2626'; return `${escapeHtml(cat.title)} <b style="color:${color}">${cat.score == null ? '—' : sc}</b>` })
-        .join('　')
-      const metrics = (psItem.metrics ?? [])
-        .map((m) => `${escapeHtml(m.title)} ${escapeHtml(m.displayValue)}`)
-        .join('　')
-      rows.push(`<tr>
-        <td class="group-cell">${title}</td>
-        <td class="item-cell">评分类别</td>
-        <td class="desc-cell">${cats}</td>
-      </tr>`)
-      if (metrics) {
-        rows.push(`<tr>
-          <td class="group-cell"></td>
-          <td class="item-cell">核心指标</td>
-          <td class="desc-cell">${metrics}</td>
-        </tr>`)
-      }
-    }
-    if (rows.length === 0) return ''
-    return `<table class="contract-table ps-table">
-      <thead><tr><th style="width:12%">通道</th><th style="width:16%">项目</th><th>内容</th></tr></thead>
-      <tbody>${rows.join('')}</tbody>
-    </table>`
-  })()
 
   // ── 截图（仅 PageSpeed 移动端/桌面端页面截图）──
   const shotItems = pagespeedShots.filter((s) => s.dataUrl)
@@ -289,32 +298,15 @@ export function buildReportHtml(data: ReportData): string {
         .join('')}
     </div>`
 
-  // ── 板块验收汇总（结论页）──
-  const summaryRows = Array.from(groups.entries())
-    .map(([groupName, groupResults]) => {
-      const cnt = (s: string) => groupResults.filter((r) => r.status === s).length
-      return `<tr>
-        <td>${escapeHtml(groupName)}</td>
-        <td>${groupResults.length}</td>
-        <td>${cnt('pass')}</td>
-        <td>${cnt('warn')}</td>
-        <td>${cnt('fail')}</td>
-        <td>${cnt('verify')}</td>
-      </tr>`
-    })
-    .join('')
-
-  const hasCriticalFailed = results.some((r) => r.status === 'fail' && r.severity === 'critical')
-
   return `<style>
   .report-root, .report-root * { box-sizing: border-box; margin: 0; padding: 0; }
-  .report-root { font-family: "Microsoft YaHei", "PingFang SC", "SimSun", sans-serif; color: #1f2430; background: #f6f8fb; padding: 32px 40px; line-height: 1.65; }
+  .report-root { font-family: "Microsoft YaHei", "PingFang SC", "SimSun", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; color: #1f2430; background: #f6f8fb; padding: 32px 40px; line-height: 1.65; }
   @media print {
     .report-root { padding: 0; }
     @page { size: A4; }
     .report-root .contract-table { break-inside: auto; }
     .report-root .contract-table tr, .report-root .contract-table td { break-inside: auto; }
-    .report-root .header, .report-root .stat, .report-root .shot-item, .report-root .conclusion { break-inside: avoid; }
+    .report-root .header, .report-root .stat, .report-root .shot-item { break-inside: avoid; }
     .report-root thead { display: table-header-group; }
     .report-root { background: #fff; }
     .stat-grid { grid-template-columns: repeat(6, 1fr); }
@@ -326,10 +318,9 @@ export function buildReportHtml(data: ReportData): string {
   .report-root h1, .report-root h2, .report-root h3 { margin: 0; font-weight: 700; }
 
   /* 报告抬头（合同式居中标题） */
-  .header { text-align: center; background: #fff; border-radius: 14px; border-top: 4px solid #2563eb; padding: 30px 28px 22px; box-shadow: 0 2px 12px rgba(37,99,235,.06); margin-bottom: 26px; }
-  .header h1 { font-size: 26px; letter-spacing: 3px; color: #1e293b; }
-  .header .company { margin-top: 8px; font-size: 14px; color: #2563eb; font-weight: 600; }
-  .header .doc-no { margin-top: 8px; font-size: 12px; color: #64748b; }
+  .header { text-align: center; background: #fff; border-radius: 14px; border-top: 4px solid #2563eb; padding: 26px 28px 24px; box-shadow: 0 2px 12px rgba(37,99,235,.06); margin-bottom: 26px; }
+  .header h1 { font-size: 24px; letter-spacing: 3px; color: #1e293b; }
+  .header .company { margin-top: 6px; font-size: 13px; color: #2563eb; font-weight: 600; }
 
   h2.section-title { font-size: 15px; font-weight: 700; color: #1e293b; border-left: 4px solid #2563eb; padding-left: 10px; margin: 26px 0 12px; letter-spacing: .5px; }
 
@@ -365,7 +356,6 @@ export function buildReportHtml(data: ReportData): string {
   .sev-critical { color: #b91c1c; border-color: #b91c1c; background: #fef2f2; }
   .sev-warning { color: #b45309; border-color: #b45309; background: #fffbeb; }
   .sev-suggest { color: #6b7280; border-color: #6b7280; background: #fafafa; }
-  .desc-cell .desc-label { color: #6b7280; }
   .desc-cell .note { margin-top: 4px; padding: 3px 6px; background: #fffbeb; border-left: 3px solid #f59e0b; font-size: 12px; }
 
   .badge { display: inline-block; border: 1px solid; border-radius: 999px; padding: 2px 12px; font-size: 12px; font-weight: 600; white-space: nowrap; letter-spacing: .3px; }
@@ -374,11 +364,9 @@ export function buildReportHtml(data: ReportData): string {
   .badge-fail { color: #b91c1c; border-color: #b91c1c; background: #fef2f2; }
   .badge-skip { color: #6b7280; border-color: #6b7280; background: #fafafa; }
   .badge-verify { color: #2563eb; border-color: #2563eb; background: #eff6ff; }
-  .deliver-cell { text-align: center; }
+  .deliver-cell { text-align: center; vertical-align: middle; }
+  .deliver-cell .deliver-text { display: inline-block; text-align: left; font-size: 12px; line-height: 1.6; color: #334155; word-break: break-word; }
   .status-cell .actual { margin-top: 3px; font-size: 12px; color: #444; max-width: 220px; word-break: break-all; }
-
-  /* PageSpeed */
-  .ps-table .ps-error { color: #b91c1c; }
 
   /* 证据截图 */
   .shot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -386,31 +374,14 @@ export function buildReportHtml(data: ReportData): string {
   .shot-item img { width: 100%; display: block; border-radius: 6px; border: 1px solid #eef2f7; }
   .shot-item figcaption { font-size: 12px; color: #475569; padding: 6px 2px 0; text-align: center; font-weight: 600; }
 
-  /* 结论 */
-  .conclusion { border: 1px solid #dbe3ef; border-left: 5px solid ${conclusionColor}; border-radius: 12px; background: #fff; padding: 20px 24px; margin-top: 8px; box-shadow: 0 2px 10px rgba(15,23,42,.05); }
-  .conclusion .conclusion-title { font-size: 18px; font-weight: 700; color: ${conclusionColor}; margin-bottom: 8px; }
-  .conclusion p { margin: 4px 0; }
-  .conclusion .sign { margin-top: 24px; display: flex; justify-content: space-between; font-size: 13px; }
-
   .footer { margin-top: 32px; text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px solid #e5eaf3; padding-top: 14px; }
-
-  /* 结论页：板块验收汇总表 + 签名区 */
-  .summary-table { margin-top: 18px; }
-  .summary-table td { text-align: center; }
-  .summary-table td:first-child { text-align: left; }
-  .summary-table tr.summary-total td { font-weight: 700; background: #f8fafc; }
-  .sign-row { display: flex; gap: 40px; margin-top: 30px; }
-  .sign-block { flex: 1; }
-  .sign-label { font-size: 12px; color: #64748b; margin-bottom: 6px; }
-  .sign-line { border-bottom: 1px solid #94a3b8; height: 30px; font-size: 13px; }
 </style>
 <div class="report-root">
 
   <div class="header">
-    ${settings.logoPath ? `<img src="${settings.logoPath}" alt="logo" style="height:48px;margin-bottom:8px;" />` : ''}
+    ${logoDataUrl ? `<img src="${logoDataUrl}" alt="logo" style="display:block;height:44px;margin:0 auto 10px;object-fit:contain;" />` : ''}
     <h1>${escapeHtml(settings.reportTitle || '网站合规性检测报告')}</h1>
     ${settings.companyName ? `<div class="company">${escapeHtml(settings.companyName)}</div>` : ''}
-    <div class="doc-no">报告编号：WEB-REPORT-${String(task.id).padStart(4, '0')}　　生成日期：${escapeHtml(generatedAt)}</div>
   </div>
 
   <h2 class="section-title">一、基本信息</h2>
@@ -420,12 +391,8 @@ export function buildReportHtml(data: ReportData): string {
       <td class="label">检测网址</td><td class="value">${escapeHtml(site.url)}</td>
     </tr>
     <tr>
-      <td class="label">规则集</td><td class="value">${escapeHtml(ruleSet.name)}</td>
-      <td class="label">任务编号</td><td class="value">#${task.id}</td>
-    </tr>
-    <tr>
-      <td class="label">检测时间</td><td class="value">${escapeHtml(task.startedAt ?? '—')}</td>
-      <td class="label">完成时间</td><td class="value">${escapeHtml(task.finishedAt ?? '—')}</td>
+      <td class="label">报告编号</td><td class="value">WEB-REPORT-${String(task.id).padStart(4, '0')}</td>
+      <td class="label">生成日期</td><td class="value">${escapeHtml(formatDateTime(generatedAt))}</td>
     </tr>
   </table>
 
@@ -443,47 +410,6 @@ export function buildReportHtml(data: ReportData): string {
   </table>
 
   ${screenshotSection ? `${sectionTitle('PageSpeed 评分截图')}${screenshotSection}` : ''}
-
-  ${settings.showConclusionPage ? `
-  ${sectionTitle('检测结论')}
-  <div class="conclusion">
-    <div class="conclusion-title">${CONCLUSION_TEXT[conclusion]}</div>
-    <p>本次对「<strong>${escapeHtml(site.name)}</strong>」（${escapeHtml(site.url)}）执行 ${escapeHtml(ruleSet.name)} 规则集检测，最终得分为 <strong style="color:${scoreColor}">${score}</strong> 分。</p>
-    <p>共检测 ${results.length} 项：通过 ${passCount} 项，警告 ${warnCount} 项，失败 ${failCount} 项，跳过 ${skipCount} 项。</p>
-    ${hasCriticalFailed ? '<p><strong>存在必须项（critical）失败，按规则判定为「不通过」。</strong></p>' : ''}
-    <p>${escapeHtml(settings.footerText)}</p>
-  </div>
-
-  <table class="contract-table summary-table">
-    <thead>
-      <tr>
-        <th style="width:30%">验收板块</th>
-        <th>项数</th>
-        <th>通过</th>
-        <th>警告</th>
-        <th>失败</th>
-        <th>待验收</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${summaryRows}
-      <tr class="summary-total">
-        <td>合计</td>
-        <td>${results.length}</td>
-        <td>${passCount}</td>
-        <td>${warnCount}</td>
-        <td>${failCount}</td>
-        <td>${verifyCount}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="sign-row">
-    <div class="sign-block"><div class="sign-label">检测人（签字）</div><div class="sign-line"></div></div>
-    <div class="sign-block"><div class="sign-label">审核人（签字）</div><div class="sign-line"></div></div>
-    <div class="sign-block"><div class="sign-label">日期</div><div class="sign-line">${escapeHtml(generatedAt)}</div></div>
-  </div>
-  <div style="margin-top:16px;font-size:13px;">检测机构（盖章）：${settings.companyName ? escapeHtml(settings.companyName) : '______________________'}</div>` : ''}
 
   <div class="footer">${escapeHtml(settings.footerText)}</div>
 

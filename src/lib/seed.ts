@@ -1,135 +1,76 @@
-import type { Severity } from './types'
 
-/** 内置默认规则集种子数据（与原桌面版 25 条规则一一对应） */
+/** 内置规则集种子数据：建站服务合同验收 */
 
-const GROUP_SEO = 'SEO'
-const GROUP_PERF = '性能'
-const GROUP_SECURITY = '安全'
-const GROUP_CONTENT = '内容与可用性'
-const GROUP_COMPLIANCE = '合规（按需启用）'
 const GROUP_PLAN = '网站规划'
 const GROUP_BUILD = '网站建设'
 const GROUP_OPTIMIZE = '功能与优化'
 const GROUP_ADMIN = '后台管理'
 const GROUP_CONTENT_FILL = '图文内容'
-const GROUP_ASSET = '客户资产'
 const GROUP_SUPPORT = '售后支持'
-const GROUP_MAINTAIN = '年度维保'
 
 interface SeedRule {
   groupName: string
   ruleKey: string
   name: string
-  severity: Severity
+  description?: string
+  /** 交付成果文案（可留空，自动用预设） */
+  deliverable?: string
   params?: Record<string, unknown>
 }
-
-const seedRules: SeedRule[] = [
-  // ── SEO ──
-  { groupName: GROUP_SEO, ruleKey: 'seo.title.exists', name: 'title 标签存在且非空', severity: 'critical', params: {} },
-  { groupName: GROUP_SEO, ruleKey: 'seo.title.length', name: 'title 长度合理（≤ 60 字符）', severity: 'warning', params: { maxLength: 60 } },
-  { groupName: GROUP_SEO, ruleKey: 'seo.meta.description', name: 'meta description 存在', severity: 'warning', params: {} },
-  { groupName: GROUP_SEO, ruleKey: 'seo.og.basic', name: 'OG 基础标签完整', severity: 'warning', params: { require: ['og:title', 'og:image', 'og:description'] } },
-  { groupName: GROUP_SEO, ruleKey: 'seo.canonical', name: 'canonical 链接存在', severity: 'warning', params: {} },
-  { groupName: GROUP_SEO, ruleKey: 'seo.robots.txt', name: 'robots.txt 可访问', severity: 'warning', params: {} },
-  { groupName: GROUP_SEO, ruleKey: 'seo.sitemap.xml', name: 'sitemap.xml 可访问', severity: 'warning', params: {} },
-  { groupName: GROUP_SEO, ruleKey: 'seo.h1.exists', name: '存在唯一 h1 标题', severity: 'warning', params: {} },
-
-  // ── 性能 ──
-  { groupName: GROUP_PERF, ruleKey: 'perf.ttfb', name: '首字节时间 TTFB', severity: 'warning', params: { passMs: 800, warnMs: 1500 } },
-  { groupName: GROUP_PERF, ruleKey: 'perf.domcontentloaded', name: 'DOM 加载完成时间', severity: 'warning', params: { passMs: 2000, warnMs: 4000 } },
-  { groupName: GROUP_PERF, ruleKey: 'perf.load', name: '完整加载时间', severity: 'warning', params: { passMs: 3000, warnMs: 6000 } },
-  { groupName: GROUP_PERF, ruleKey: 'perf.total.size', name: '页面总传输大小', severity: 'warning', params: { passMb: 3, warnMb: 6 } },
-  { groupName: GROUP_PERF, ruleKey: 'perf.lcp', name: 'LCP 最大内容绘制', severity: 'warning', params: { passMs: 2500, warnMs: 4000 } },
-
-  // ── 安全 ──
-  { groupName: GROUP_SECURITY, ruleKey: 'security.https', name: 'HTTPS 可用且证书有效', severity: 'critical', params: {} },
-  { groupName: GROUP_SECURITY, ruleKey: 'security.cert.days', name: '证书剩余有效期', severity: 'warning', params: { passDays: 30, warnDays: 7 } },
-  { groupName: GROUP_SECURITY, ruleKey: 'security.hsts', name: 'HSTS 响应头存在', severity: 'suggest', params: {} },
-  { groupName: GROUP_SECURITY, ruleKey: 'security.security.headers', name: '基础安全响应头', severity: 'warning', params: { require: ['X-Frame-Options', 'X-Content-Type-Options', 'Referrer-Policy'] } },
-  { groupName: GROUP_SECURITY, ruleKey: 'security.sensitive.info', name: '无敏感信息泄露', severity: 'critical', params: {} },
-  { groupName: GROUP_SECURITY, ruleKey: 'security.mixed.content', name: '无混合内容（https 页无 http 资源）', severity: 'critical', params: {} },
-
-  // ── 内容与可用性 ──
-  { groupName: GROUP_CONTENT, ruleKey: 'content.charset', name: '页面编码为 UTF-8', severity: 'critical', params: {} },
-  { groupName: GROUP_CONTENT, ruleKey: 'content.favicon', name: 'favicon 存在', severity: 'suggest', params: {} },
-  { groupName: GROUP_CONTENT, ruleKey: 'content.viewport', name: '移动端 viewport 设置正确', severity: 'critical', params: {} },
-  { groupName: GROUP_CONTENT, ruleKey: 'content.console.errors', name: '页面加载无未捕获 JS 错误', severity: 'warning', params: {} },
-  { groupName: GROUP_CONTENT, ruleKey: 'content.404.friendly', name: '404 页面友好', severity: 'warning', params: {} },
-
-  // ── 合规（按需启用）──
-  { groupName: GROUP_COMPLIANCE, ruleKey: 'compliance.icp', name: 'ICP 备案号展示（中国大陆）', severity: 'warning', params: {} },
-  { groupName: GROUP_COMPLIANCE, ruleKey: 'compliance.privacy', name: '隐私政策入口存在', severity: 'warning', params: {} },
-  { groupName: GROUP_COMPLIANCE, ruleKey: 'compliance.copyright.year', name: '版权年份为当前年', severity: 'suggest', params: {} }
-]
 
 /** 建站服务合同验收规则：映射合同 8 大板块；verify.* 为人工交付项（待验收），其余由引擎自动检测 */
 const contractRuleDefs: SeedRule[] = [
   // ── 网站规划 ──
-  { groupName: GROUP_PLAN, ruleKey: 'verify.plan.cycle', name: '建站周期（4—6 周交付）', severity: 'warning' },
-  { groupName: GROUP_PLAN, ruleKey: 'verify.plan.strategy', name: '网站建设规划（行业定位定制结构路径）', severity: 'warning' },
-  { groupName: GROUP_PLAN, ruleKey: 'verify.plan.style', name: '精选样式库（品牌视觉 1 套模板）', severity: 'suggest' },
+  { groupName: GROUP_PLAN, ruleKey: 'verify.plan.cycle', name: '建站周期（4—6 周交付）', description: '4—6 周' },
+  { groupName: GROUP_PLAN, ruleKey: 'verify.plan.strategy', name: '网站建设规划（行业定位定制结构路径）', description: '基于行业特性与品牌定位，量身定制网站结构与用户体验路径，助力高效转化' },
+  { groupName: GROUP_PLAN, ruleKey: 'verify.plan.style', name: '精选样式库（品牌视觉 1 套模板）', description: '精选一站式样式库，打造独特品牌视觉风格' },
 
   // ── 网站建设 ──
-  { groupName: GROUP_BUILD, ruleKey: 'verify.build.banner', name: 'Banner 创意设计（交付 3 张品牌视觉）', severity: 'suggest' },
-  { groupName: GROUP_BUILD, ruleKey: 'verify.build.pages', name: '常规页面搭建（交付 10 个基础页面）', severity: 'warning' },
-  { groupName: GROUP_BUILD, ruleKey: 'content.viewport', name: '响应式设计（移动端 viewport 正确）', severity: 'critical' },
-  { groupName: GROUP_BUILD, ruleKey: 'contract.contact', name: '多转化入口（全局/页内询盘表单）', severity: 'warning' },
-  { groupName: GROUP_BUILD, ruleKey: 'contract.search', name: '全站搜索功能内置可用', severity: 'warning' },
-  { groupName: GROUP_BUILD, ruleKey: 'content.404.friendly', name: '自定义 404 页面友好', severity: 'warning' },
-  { groupName: GROUP_BUILD, ruleKey: 'compliance.privacy', name: '隐私政策页（海外推广合规）', severity: 'warning' },
-  { groupName: GROUP_BUILD, ruleKey: 'contract.gtranslate', name: 'Google 翻译插件（一键多语言）', severity: 'suggest' },
-  { groupName: GROUP_BUILD, ruleKey: 'verify.build.thanks', name: '感谢页跳转跟踪已埋点', severity: 'suggest' },
+  { groupName: GROUP_BUILD, ruleKey: 'verify.build.banner', name: 'Banner 创意设计（交付 3 张品牌视觉）', description: '由专业设计师操刀，融合品牌调性，提升首页视觉冲击力与用户停留时长' },
+  { groupName: GROUP_BUILD, ruleKey: 'verify.build.pages', name: '常规页面搭建（交付 10 个基础页面）', description: '搭建首页、产品、博客等10个标准样式页面，覆盖业务全场景' },
+  { groupName: GROUP_BUILD, ruleKey: 'content.viewport', name: '响应式设计（移动端 viewport 正确）', description: '全设备自适应，确保手机、电脑浏览体验一致流畅' },
+  { groupName: GROUP_BUILD, ruleKey: 'contract.contact', name: '多转化入口（全局/页内询盘表单）', description: '设置全局与页面内询盘表单，提升转化率', params: { defaultPass: true } },
+  { groupName: GROUP_BUILD, ruleKey: 'contract.search', name: '全站搜索功能内置可用', description: '内置搜索框，便于用户迅速检索定位站内内容' },
+  { groupName: GROUP_BUILD, ruleKey: 'compliance.privacy', name: '隐私政策页（海外推广合规）', description: '配置隐私政策页，符合海外推广合规要求' },
+  { groupName: GROUP_BUILD, ruleKey: 'contract.gtranslate', name: 'Google 翻译插件（一键多语言）', description: '免费提供Google内嵌翻译插件，一键实现多语言建站' },
+  { groupName: GROUP_BUILD, ruleKey: 'verify.build.thanks', name: '感谢页跳转跟踪已埋点', description: '精准跟踪转化行为，减少统计误差' },
 
   // ── 功能与优化 ──
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'contract.ga', name: 'GA 预埋（流量统计可追踪）', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'security.https', name: 'HTTPS 安全证书部署', severity: 'critical' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'security.cert.days', name: 'SSL 证书剩余有效期充足', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'security.security.headers', name: '基础安全响应头配置', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.title.exists', name: 'SEO：title 标签存在且非空', severity: 'critical' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.title.length', name: 'SEO：title 长度合理（≤60 字符）', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.meta.description', name: 'SEO：meta description 存在', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.canonical', name: 'SEO：canonical 链接存在', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.robots.txt', name: 'SEO：robots.txt 可访问', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.sitemap.xml', name: 'SEO：sitemap.xml 可访问', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.h1.exists', name: 'SEO：唯一 h1 标题', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.html', name: 'HTML 优化（URL/Title/H1/Alt/Meta 自定义）', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.server', name: '基础 AWS 海外服务器（2vCPU/8GB/20GB）', severity: 'warning' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.firewall', name: '免费版防火墙（CloudFlare/QUIC.cloud 1 年）', severity: 'suggest' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.cdn', name: '安全与 CDN 加速服务（1 年）', severity: 'suggest' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'contract.ga', name: 'GA 预埋（流量统计可追踪）', description: '后台一键导入Google Analytics代码，便于数据跟踪' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'security.https', name: 'HTTPS 安全证书部署', description: '部署SSL证书，支持HTTPS协议，提升网站安全性', params: { defaultPass: true } },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.title.exists', name: 'SEO：title 标签存在且非空', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.meta.description', name: 'SEO：meta description 存在', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.robots.txt', name: 'SEO：robots.txt 可访问', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.sitemap.xml', name: 'SEO：sitemap.xml 可访问', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.h1.exists', name: 'SEO：唯一 h1 标题', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.html', name: 'HTML 优化（URL/Title/H1/Alt/Meta 自定义）', description: '支持自定义URL、Title、H1、图片Alt和Meta描述' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.server', name: '基础 AWS 海外服务器（2vCPU/8GB/20GB）', description: '配置2vCPU+8GB内存+20GB空间，支持最多100个产品' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.firewall', name: '免费版防火墙（CloudFlare/QUIC.cloud 1 年）', description: 'CloudFlare或QUIC.cloud免费防火墙，有效过滤恶意流量与网络攻击，为网站提供基础而可靠的安全防护' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.cdn', name: '安全与 CDN 加速服务（1 年）', description: '提供免费版CloudFlare或QUIC.cloud防护与CDN加速服务，提升访问速度与安全' },
 
   // ── 后台管理 ──
-  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.news', name: '新闻管理（批量/分类/图文编辑/回收）', severity: 'warning' },
-  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.product', name: '产品管理（批量/分类/图文/回收）', severity: 'warning' },
-  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.files', name: '多格式文件管理（上传/筛选/删除）', severity: 'suggest' },
-  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.youtube', name: 'YouTube 视频嵌入', severity: 'suggest' },
-  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.mail', name: '邮件管理（询盘查看/导出）', severity: 'suggest' },
-  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.onboard', name: 'Onboard 智慧网站解决方案', severity: 'suggest' },
+  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.news', name: '新闻管理（批量/分类/图文编辑/回收）', description: '批量上传功能\n新闻分类功能\n图文自由编辑排版\n一键快速编辑修改\n自定义设置发布日期\n回收恢复已删除新闻，数据可逆', params: { defaultPass: true } },
+  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.product', name: '产品管理（批量/分类/图文/回收）', description: '批量上传功能\n产品分类功能\n一键快速编辑修改\n支持产品的图片加文字信息上传\n回收恢复已删除产品，数据可逆' },
+  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.files', name: '多格式文件管理（上传/筛选/删除）', description: '支持不同格式的媒体文件进行上传、筛选、删除，方便统一管理' },
+  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.youtube', name: 'YouTube 视频嵌入', description: '支持Youtube视频无缝嵌入网站，丰富内容形式，延长访客停留时间，提升网站转化率与品牌专业度' },
+  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.mail', name: '邮件管理（询盘查看/导出）', description: '后台查看导出询盘数据' },
+  { groupName: GROUP_ADMIN, ruleKey: 'verify.admin.onboard', name: 'Onboard 智慧网站解决方案', description: '集成AI策略与多平台社媒嵌入，一站式管理' },
 
   // ── 图文内容 ──
-  { groupName: GROUP_CONTENT_FILL, ruleKey: 'verify.content.fill', name: '图文填充（协助落地 10 页素材）', severity: 'warning' },
-  { groupName: GROUP_CONTENT_FILL, ruleKey: 'verify.content.product', name: '产品代上传（1—5 个）', severity: 'suggest' },
-  { groupName: GROUP_CONTENT_FILL, ruleKey: 'verify.content.blog', name: '博文代上传（1—4 篇）', severity: 'suggest' },
-
-  // ── 客户资产 ──
-  { groupName: GROUP_ASSET, ruleKey: 'verify.asset.domain', name: '网站域名指导（推荐/解析）', severity: 'warning' },
-  { groupName: GROUP_ASSET, ruleKey: 'verify.asset.icp', name: '网站备案指导', severity: 'warning' },
-  { groupName: GROUP_ASSET, ruleKey: 'compliance.icp', name: 'ICP 备案号展示', severity: 'warning' },
+  { groupName: GROUP_CONTENT_FILL, ruleKey: 'verify.content.fill', name: '图文填充（协助落地 10 页素材）', description: '基于行业特性与营销策略，提供素材规格说明，协助上传落地10个已搭建页面的图文素材' },
+  { groupName: GROUP_CONTENT_FILL, ruleKey: 'verify.content.product', name: '产品代上传（1—5 个）', description: '专业产品信息整理与人工上传服务，包括标题、描述、图片优化，提升产品吸引力' },
+  { groupName: GROUP_CONTENT_FILL, ruleKey: 'verify.content.blog', name: '博文代上传（1—4 篇）', description: '支持品牌故事、行业洞察、公司动态等内容的新闻/Blog人工上传，增强SEO与用户粘性' },
 
   // ── 售后支持 ──
-  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.inspection', name: '网站日常巡检', severity: 'warning' },
-  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.bugfix', name: '紧急 Bug 修复', severity: 'warning' },
-  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.perf', name: '性能与安全优化（CDN/缓存/数据库/备份）', severity: 'warning' },
-  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.ssl', name: 'SSL 证书全生命周期管理', severity: 'warning' },
-  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.security', name: '安全防护与巡检（漏洞扫描）', severity: 'warning' },
-  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.training', name: '后台培训与操作手册（1 份）', severity: 'suggest' },
-  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.content', name: '上线内容技术支持', severity: 'suggest' },
-  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.rollback', name: '免费数据回滚一次', severity: 'suggest' },
-  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.source', name: '免费提供源代码（1 次）', severity: 'suggest' },
-
-  // ── 年度维保 ──
-  { groupName: GROUP_MAINTAIN, ruleKey: 'verify.maintain.first_year', name: '首年免费运维保障', severity: 'warning' },
-  { groupName: GROUP_MAINTAIN, ruleKey: 'verify.maintain.renew', name: '次年起续费维护（¥5000/年）', severity: 'suggest' }
+  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.inspection', name: '网站日常巡检', description: '定期对网站运行状态、核心页面链接及加载速度进行系统性检查' },
+  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.bugfix', name: '紧急 Bug 修复', description: '快速响应并修复网站功能异常、显示问题等紧急故障，保障稳定运行' },
+  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.perf', name: '性能与安全优化（CDN/缓存/数据库/备份）', description: '包含CDN加速、缓存优化、数据库调优、SSL证书管理与定期备份，提升速度与安全' },
+  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.ssl', name: 'SSL 证书全生命周期管理', description: '服务期内，支持SSL证书的全权维护，确保证书持续有效，在浏览器中始终显示安全锁标识' },
+  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.security', name: '安全防护与巡检（漏洞扫描）', description: '定期漏洞扫描与网站健康检查，防范网络攻击' },
+  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.training', name: '后台培训与操作手册（1 份）', description: '提供详细图文操作手册，帮助快速掌握后台管理' },
+  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.content', name: '上线内容技术支持', description: '对上线交付范围内网站内容修改进行指导' },
+  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.rollback', name: '免费数据回滚一次', description: '免费提供一次网站故障或数据异常时恢复至之前备份版本的服务' },
+  { groupName: GROUP_SUPPORT, ruleKey: 'verify.support.source', name: '免费提供源代码（1 次）', description: '网站上线后免费打包移交源码一次，不含部署' },
 ]
 
 /** 内置规则集定义 */
@@ -141,19 +82,9 @@ export interface BuiltinRuleSetDef {
 
 export const BUILTIN_RULE_SETS: BuiltinRuleSetDef[] = [
   {
-    name: '默认合规检查（全面）',
-    description: '内置默认规则集：覆盖 SEO、性能、安全、内容可用性与合规维度，适用于网站上线前全面检查。',
-    rules: seedRules
-  },
-  {
     name: '建站服务合同验收',
-    description: '按建站服务合同 8 大板块（网站规划/网站建设/功能与优化/后台管理/图文内容/客户资产/售后支持/年度维保）逐项验收；可自动检测项由浏览器引擎验证，人工交付项标记为「待验收」。',
+    description: "按建站服务合同 6 大板块（网站规划/网站建设/功能与优化/后台管理/图文内容/售后支持）逐项验收；可自动检测项由浏览器引擎验证，人工交付项标记为「待验收」。",
     rules: contractRuleDefs
-  },
-  {
-    name: '快速安全检查',
-    description: '仅包含安全与基础可用性规则，检测耗时短，适合快速初筛。',
-    rules: seedRules.filter((r) => [GROUP_SECURITY, GROUP_CONTENT].includes(r.groupName))
   }
 ]
 
@@ -168,8 +99,9 @@ export function toRuleRows(
   groupName: string
   ruleKey: string
   name: string
-  severity: Severity
   enabled: boolean
+  description?: string
+  deliverable?: string
   params: Record<string, unknown>
   sortOrder: number
 }[] {
@@ -179,8 +111,9 @@ export function toRuleRows(
     groupName: r.groupName,
     ruleKey: r.ruleKey,
     name: r.name,
-    severity: r.severity,
     enabled: true,
+    description: r.description,
+    deliverable: r.deliverable && r.deliverable.trim() ? r.deliverable : DELIVERABLE_PRESETS[r.ruleKey] ?? '',
     params: r.params ?? {},
     sortOrder: idx
   }))
@@ -191,7 +124,8 @@ export function getRuleCatalog(): {
   groupName: string
   ruleKey: string
   name: string
-  severity: Severity
+  description?: string
+  deliverable?: string
   params: Record<string, unknown>
 }[] {
   const seen = new Set<string>()
@@ -199,7 +133,8 @@ export function getRuleCatalog(): {
     groupName: string
     ruleKey: string
     name: string
-    severity: Severity
+    description?: string
+    deliverable?: string
     params: Record<string, unknown>
   }[] = []
   for (const def of BUILTIN_RULE_SETS) {
@@ -210,10 +145,70 @@ export function getRuleCatalog(): {
         groupName: seed.groupName,
         ruleKey: seed.ruleKey,
         name: seed.name,
-        severity: seed.severity,
+        description: seed.description,
+        deliverable: seed.deliverable && seed.deliverable.trim() ? seed.deliverable : DELIVERABLE_PRESETS[seed.ruleKey] ?? '',
         params: seed.params ?? {}
       })
     }
   }
   return catalog
+}
+
+
+/** 预设交付成果文案：按规则 key 提供默认「交付成果」，规则页可覆盖 */
+export const DELIVERABLE_PRESETS: Record<string, string> = {
+  'verify.plan.cycle': '交付建站周期排期表：4—6 周按里程碑推进',
+  'verify.plan.strategy': '交付《网站建设规划方案》：行业定位 + 定制结构路径',
+  'verify.plan.style': '交付精选样式库与品牌视觉模板 1 套',
+  'verify.build.banner': '交付 Banner 创意设计 3 张品牌视觉图',
+  'verify.build.pages': '交付 10 个基础标准页面',
+  'content.viewport': '移动端 viewport 配置正确，全设备自适应',
+  'contract.contact': '已部署全局/页内询盘表单',
+  'contract.search': '已内置全站搜索功能',
+  'compliance.privacy': '已配置隐私政策页',
+  'contract.gtranslate': '已嵌入 Google 翻译插件',
+  'verify.build.thanks': '感谢页跳转跟踪已埋点',
+  'contract.ga': 'GA 代码已预埋，流量可追踪',
+  'security.https': 'HTTPS 证书已部署',
+  'seo.title.exists': 'Title 标签已配置',
+  'seo.meta.description': 'Meta Description 已配置',
+  'seo.robots.txt': 'robots.txt 可正常访问',
+  'seo.sitemap.xml': 'sitemap.xml 可正常访问',
+  'seo.h1.exists': 'H1 标题唯一且已配置',
+  'verify.optimize.html': 'URL/Title/H1/Alt/Meta 已完成自定义优化',
+  'verify.optimize.server': 'AWS 海外服务器已交付（2vCPU/8GB/20GB）',
+  'verify.optimize.firewall': '免费版防火墙已开通（CloudFlare/QUIC.cloud 1 年）',
+  'verify.optimize.cdn': 'CDN 与安全加速服务已启用（1 年）',
+  'verify.admin.news': '新闻管理后台已交付（批量/分类/图文编辑/回收）',
+  'verify.admin.product': '产品管理后台已交付（批量/分类/图文/回收）',
+  'verify.admin.files': '多格式文件管理功能已交付',
+  'verify.admin.youtube': 'YouTube 视频嵌入功能已交付',
+  'verify.admin.mail': '邮件管理已开通（询盘查看/导出）',
+  'verify.admin.onboard': 'Onboard 智慧网站解决方案已集成',
+  'verify.content.fill': '已协助落地 10 页图文素材',
+  'verify.content.product': '已完成产品代上传 1—5 个',
+  'verify.content.blog': '已完成博文代上传 1—4 篇',
+  'verify.support.inspection': '提供网站日常巡检服务',
+  'verify.support.bugfix': '提供紧急 Bug 修复服务',
+  'verify.support.perf': '提供性能与安全优化服务',
+  'verify.support.ssl': '提供 SSL 证书全生命周期管理',
+  'verify.support.security': '提供安全防护与漏洞扫描巡检',
+  'verify.support.training': '已交付后台培训与操作手册 1 份',
+  'verify.support.content': '提供上线内容技术支持',
+  'verify.support.rollback': '提供免费数据回滚 1 次',
+  'verify.support.source': '提供免费源代码移交 1 次'
+}
+
+/** 获取规则预设交付成果文案（无预设返回空串） */
+export function presetDeliverable(ruleKey: string): string {
+  return DELIVERABLE_PRESETS[ruleKey] ?? ''
+}
+
+/** 将规则行补充预设交付成果：行内未定义时自动填充预设文案 */
+export function applyDeliverablePreset(row: { ruleKey: string; deliverable?: string }): { ruleKey: string; deliverable?: string } {
+  if (!row.deliverable || !row.deliverable.trim()) {
+    const preset = DELIVERABLE_PRESETS[row.ruleKey]
+    if (preset) row.deliverable = preset
+  }
+  return row
 }

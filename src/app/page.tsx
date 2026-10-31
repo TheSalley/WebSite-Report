@@ -17,7 +17,7 @@ const features = [
   {
     icon: FileText,
     title: '截图取证与报告',
-    desc: '失败/警告项自动全页截图，一键生成所见即所得报告（可打印 PDF）。',
+    desc: '自动全页截图取证，一键生成所见即所得报告（可打印 PDF）。',
     accent: 'from-amber-500 to-orange-500'
   },
   {
@@ -34,7 +34,7 @@ export default function Home() {
   return (
     <div className="space-y-10">
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-2xl border border-border bg-background-elevated p-8 shadow-sm sm:p-12">
+      <section className="glass relative overflow-hidden rounded-3xl p-8 sm:p-12">
         <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
 
@@ -46,7 +46,7 @@ export default function Home() {
             网站合规性检测
           </h1>
           <p className="mt-3 max-w-2xl leading-7 text-foreground-muted">
-            输入网址，选择规则集，真实浏览器深度检测站点合规性，自动截图取证并生成得分报告。
+            输入网址，选择规则集，真实浏览器深度检测站点合规性，自动截图取证并生成交付报告。
             面向质检/合规人员、项目交付与网站运营人员。
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -85,7 +85,7 @@ export default function Home() {
           return (
             <div
               key={f.title}
-              className="group relative overflow-hidden rounded-xl border border-border bg-background-elevated p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+              className="glass glass-hover group relative overflow-hidden rounded-2xl p-5"
             >
               <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${f.accent}`} />
               <div className="flex items-center gap-3">
@@ -108,7 +108,7 @@ export default function Home() {
           { num: '2', label: 'PageSpeed 通道' },
           { num: 'PDF', label: '报告导出' }
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-border bg-background-elevated px-5 py-4 text-center shadow-sm">
+          <div key={s.label} className="glass rounded-2xl px-5 py-4 text-center">
             <div className="font-mono text-2xl font-bold text-primary">{s.num}</div>
             <div className="mt-1 text-xs text-foreground-muted">{s.label}</div>
           </div>

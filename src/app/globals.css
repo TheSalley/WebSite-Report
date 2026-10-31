@@ -43,14 +43,14 @@
   --core-zinc-800: #27272a;
   --core-zinc-900: #18181b;
 
-  /* ── Semantic 语义令牌（随主题变化） ── */
-  --background: #f8fafc;
-  --background-elevated: #ffffff;
+  /* ── Semantic 语义令牌（玻璃/柔和拟态：半透明面板 + 柔和边框） ── */
+  --background: #eef2fa;
+  --background-elevated: rgba(255, 255, 255, 0.62);
   --foreground: #18181b;
   --foreground-muted: #52525b;
-  --foreground-subtle: #a1a1aa;
-  --border: #e4e4e7;
-  --border-strong: #d4d4d8;
+  --foreground-subtle: #8b93a7;
+  --border: rgba(148, 163, 184, 0.32);
+  --border-strong: rgba(100, 116, 139, 0.45);
 
   --primary: var(--core-blue-600);
   --primary-hover: var(--core-blue-500);
@@ -70,24 +70,25 @@
   --danger-soft: var(--core-red-50);
   --danger-soft-foreground: var(--core-red-700);
 
-  --shadow-sm-value: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06);
-  --shadow-md-value: 0 2px 4px -1px rgb(16 24 40 / 0.06), 0 4px 10px -2px rgb(16 24 40 / 0.08);
-  --shadow-lg-value: 0 8px 24px -6px rgb(16 24 40 / 0.12), 0 4px 8px -4px rgb(16 24 40 / 0.08);
+  /* Soft UI 柔和投影（双层次 + 内高光） */
+  --shadow-sm-value: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 2px 8px -2px rgb(16 24 40 / 0.06);
+  --shadow-md-value: 0 4px 10px -2px rgb(16 24 40 / 0.07), 0 8px 24px -8px rgb(16 24 40 / 0.1);
+  --shadow-lg-value: 0 10px 30px -8px rgb(16 24 40 / 0.14), 0 6px 14px -6px rgb(16 24 40 / 0.1);
 
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
 }
 
 .dark {
-  --background: #0b0e14;
-  --background-elevated: #141824;
+  --background: #0c1122;
+  --background-elevated: rgba(255, 255, 255, 0.06);
   --foreground: #f4f4f5;
   --foreground-muted: #a1a1aa;
-  --foreground-subtle: #71717a;
-  --border: #262b3a;
-  --border-strong: #343b4e;
+  --foreground-subtle: #6b7384;
+  --border: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.22);
 
   --primary: var(--core-blue-400);
   --primary-hover: var(--core-blue-300);
@@ -107,9 +108,9 @@
   --danger-soft: #2d1418;
   --danger-soft-foreground: #fca5a5;
 
-  --shadow-sm-value: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow-md-value: 0 2px 4px -1px rgb(0 0 0 / 0.4), 0 4px 10px -2px rgb(0 0 0 / 0.4);
-  --shadow-lg-value: 0 8px 24px -6px rgb(0 0 0 / 0.5), 0 4px 8px -4px rgb(0 0 0 / 0.4);
+  --shadow-sm-value: 0 1px 3px 0 rgb(0 0 0 / 0.35);
+  --shadow-md-value: 0 4px 12px -2px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg-value: 0 12px 32px -8px rgb(0 0 0 / 0.55), 0 6px 16px -6px rgb(0 0 0 / 0.45);
 }
 
 @theme inline {
@@ -152,11 +153,55 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* ── 柔和渐变底 + 彩色光斑（Glassmorphism 的透光背景） ── */
 body {
-  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(1100px 620px at 8% -8%, rgba(47, 123, 246, 0.16), transparent 60%),
+    radial-gradient(900px 520px at 108% 12%, rgba(147, 84, 255, 0.13), transparent 55%),
+    radial-gradient(760px 460px at 50% 115%, rgba(16, 185, 129, 0.1), transparent 55%),
+    linear-gradient(180deg, #e8eefb 0%, #eef1fb 45%, #f2effc 100%);
+  background-attachment: fixed;
+}
+
+.dark body {
+  background:
+    radial-gradient(1100px 620px at 8% -8%, rgba(59, 110, 255, 0.18), transparent 60%),
+    radial-gradient(900px 520px at 108% 12%, rgba(139, 82, 255, 0.14), transparent 55%),
+    radial-gradient(760px 460px at 50% 115%, rgba(13, 148, 136, 0.1), transparent 55%),
+    linear-gradient(180deg, #0a0f20 0%, #0c1122 50%, #0e1024 100%);
+  background-attachment: fixed;
+}
+
+/* ── Glass 面板基础类（玻璃拟态卡片，配合半透明语义色使用） ── */
+.glass {
+  background: var(--background-elevated);
+  border: 1px solid var(--border);
+  box-shadow:
+    var(--shadow-sm-value),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+}
+
+.dark .glass {
+  box-shadow:
+    var(--shadow-sm-value),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* 玻璃面板 hover 微动效 */
+.glass-hover {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+.glass-hover:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    var(--shadow-md-value),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  background: color-mix(in srgb, var(--background-elevated) 88%, white);
 }
 
 /* 焦点可见环：满足 WCAG 2.4.7 键盘可达性 */
@@ -186,4 +231,3 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--primary) 22%, transparent);
 }
-

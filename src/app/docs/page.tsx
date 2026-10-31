@@ -1,10 +1,10 @@
-import { ShieldCheck, Globe, ListChecks, FileText, CheckCircle2, Info } from 'lucide-react'
+import { ShieldCheck, Globe, ListChecks, FileText } from 'lucide-react'
 
 const steps = [
   { icon: Globe, title: '1. 添加站点', desc: '在「站点管理」新建或批量导入待检测网站。', accent: 'text-sky-500 bg-sky-500/10' },
   { icon: ListChecks, title: '2. 选择规则集', desc: '选用内置「全面检查」或「快速安全」，也可自定义规则与阈值。', accent: 'text-violet-500 bg-violet-500/10' },
   { icon: ShieldCheck, title: '3. 开始检测', desc: '在「检测与历史」一键运行，后台真实浏览器渲染页面，实时显示进度。', accent: 'text-emerald-500 bg-emerald-500/10' },
-  { icon: FileText, title: '4. 查看报告', desc: '检测完成后查看逐项结果、截图证据与 PageSpeed 评分，导出 PDF 报告。', accent: 'text-amber-500 bg-amber-500/10' }
+  { icon: FileText, title: '4. 查看报告', desc: '检测完成后查看逐项结果、截图证据与 PageSpeed 截图，导出 PDF 报告。', accent: 'text-amber-500 bg-amber-500/10' }
 ]
 
 const groups = [
@@ -28,7 +28,7 @@ export default function DocsPage() {
         {steps.map((s) => {
           const Icon = s.icon
           return (
-            <div key={s.title} className="rounded-xl border border-border bg-background-elevated p-5 shadow-sm transition-shadow hover:shadow-md">
+            <div key={s.title} className="glass glass-hover rounded-2xl p-5">
               <div className="flex items-center gap-3">
                 <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${s.accent}`}>
                   <Icon className="h-4.5 w-4.5" />
@@ -48,7 +48,7 @@ export default function DocsPage() {
         </h2>
         <div className="space-y-3">
           {groups.map((g) => (
-            <div key={g.name} className="rounded-xl border border-border bg-background-elevated p-4 shadow-sm">
+            <div key={g.name} className="glass glass-hover rounded-2xl p-4">
               <div className={`text-sm font-semibold ${g.color}`}>{g.name}</div>
               <p className="mt-1 text-sm leading-6 text-foreground-muted">{g.desc}</p>
             </div>
@@ -56,26 +56,6 @@ export default function DocsPage() {
         </div>
       </section>
 
-      {/* 得分说明 */}
-      <section className="rounded-xl border border-border bg-background-elevated p-5 shadow-sm">
-        <h2 className="flex items-center gap-2 text-base font-semibold">
-          <Info className="h-4 w-4 text-primary" /> 得分与结论
-        </h2>
-        <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground-muted">
-          <li className="flex gap-2">
-            <CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-success" />
-            100 分制，权重：必须 = 3 / 警告 = 2 / 建议 = 1；通过全权重、警告半权重、失败/跳过记 0 分。
-          </li>
-          <li className="flex gap-2">
-            <CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-success" />
-            任一「必须」项失败 → 整体判定「不通过」；存在警告/失败 → 「有条件通过」；否则「通过」。
-          </li>
-          <li className="flex gap-2">
-            <CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-success" />
-            PageSpeed 评分随任务自动采集（移动端 + 桌面端），配置 PSI API Key 时优先使用，否则回退本地 Lighthouse。
-          </li>
-        </ul>
-      </section>
     </div>
   )
 }

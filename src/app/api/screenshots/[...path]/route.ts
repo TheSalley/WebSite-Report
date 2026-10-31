@@ -15,7 +15,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ path: stri
   try {
     const buffer = await readFile(full)
     return new NextResponse(new Uint8Array(buffer), {
-      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' }
+      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' }
     })
   } catch {
     return NextResponse.json({ error: '截图不存在' }, { status: 404 })

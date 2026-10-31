@@ -2,8 +2,9 @@
 
 import * as React from 'react'
 import { Plus, Copy, Trash2, ChevronRight, Save, ListChecks } from 'lucide-react'
-import { Button, Card, Dialog, Input, Textarea, Label, Badge, Empty, Switch, Select } from '@/components/ui'
-import type { RuleSet, Rule, Severity } from '@/lib/types'
+import { Button, Card, Dialog, Input, Textarea, Label, Empty, Switch } from '@/components/ui'
+import type { RuleSet, Rule } from '@/lib/types'
+import { fetchJson, friendlyError } from '@/lib/client-fetch'
 
 type RuleRow = Omit<Rule, 'id'> & { id?: number }
 
@@ -14,6 +15,7 @@ export default function RulesPage() {
   const [rules, setRules] = React.useState<RuleRow[]>([])
   const [dirty, setDirty] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState('')
   const [createOpen, setCreateOpen] = React.useState(false)
   const [newName, setNewName] = React.useState('')
   const [newDesc, setNewDesc] = React.useState('')
@@ -21,20 +23,35 @@ export default function RulesPage() {
   const [expandGroup, setExpandGroup] = React.useState<Record<string, boolean>>({})
 
   const loadSets = async () => {
-    const data = await fetch('/api/rulesets').then((r) => r.json())
-    setRuleSets(data)
-    if (!selectedId && data.length > 0) setSelectedId(data[0].id)
+    try {
+      const data = await fetchJson<RuleSet[]>('/api/rulesets')
+      setRuleSets(data)
+      if (!selectedId && data.length > 0) setSelectedId(data[0].id)
+      setError('')
+    } catch (e) {
+      setError(friendlyError(e))
+    } finally {
+      setLoading(false)
+    }
   }
 
   const loadRules = async (id: number) => {
-    const data = await fetch(`/api/rulesets/${id}/rules`).then((r) => r.json())
-    setRules(data)
-    setDirty(false)
+    try {
+      setRules(await fetchJson<RuleRow[]>(`/api/rulesets/${id}/rules`))
+      setDirty(false)
+      setError('')
+    } catch (e) {
+      setError(friendlyError(e))
+    }
   }
 
   const loadCatalog = async () => {
-    const data = await fetch('/api/rulesets/catalog').then((r) => r.json())
-    setCatalog(data)
+    try {
+      setCatalog(await fetchJson<RuleRow[]>('/api/rulesets/catalog'))
+      setError('')
+    } catch (e) {
+      setError(friendlyError(e))
+    }
   }
 
   React.useEffect(() => {
@@ -142,8 +159,6 @@ export default function RulesPage() {
     return Array.from(map.entries())
   }, [rules])
 
-  const severityText: Record<Severity, string> = { critical: '必须', warning: '警告', suggest: '建议' }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -155,6 +170,8 @@ export default function RulesPage() {
           <Plus className="h-4 w-4" /> 新建规则集
         </Button>
       </div>
+
+      {error && <div className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>}
 
       {loading ? (
         <div className="flex justify-center py-16"><span className="text-sm text-foreground-subtle">加载中…</span></div>
@@ -172,7 +189,7 @@ export default function RulesPage() {
                   <div
                     key={rs.id}
                     className={`group flex items-center gap-1 px-3 py-2.5 text-sm transition-colors ${
-                      active ? 'bg-primary-soft' : 'hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40'
+                      active ? 'bg-primary-soft/70 backdrop-blur-sm' : 'hover:bg-white/55 dark:hover:bg-white/[0.05]'
                     }`}
                   >
                     <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => selectSet(rs.id)}>
@@ -201,7 +218,7 @@ export default function RulesPage() {
           {/* 右侧规则编辑 */}
           {selectedId !== null && (
             <Card className="overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-zinc-50/60 px-5 py-3.5 dark:bg-zinc-800/20">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-white/40 px-5 py-3.5 dark:bg-white/[0.04]">
                 <div>
                   <h2 className="text-base font-semibold">{ruleSets.find((r) => r.id === selectedId)?.name}</h2>
                   <p className="mt-0.5 text-xs text-foreground-subtle">{rules.filter((r) => r.enabled).length}/{rules.length} 条启用</p>
@@ -225,7 +242,7 @@ export default function RulesPage() {
                     return (
                       <div key={groupName}>
                         <button
-                          className="flex w-full items-center justify-between rounded-md border border-border bg-zinc-50/60 px-3.5 py-2.5 text-sm font-medium transition-colors hover:bg-zinc-100/70 dark:bg-zinc-800/30 dark:hover:bg-zinc-800/60"
+                          className="flex w-full items-center justify-between rounded-lg border border-border/60 bg-white/45 px-3.5 py-2.5 text-sm font-medium transition-colors hover:bg-white/65 dark:bg-white/[0.05] dark:hover:bg-white/[0.08]"
                           onClick={() => setExpandGroup((g) => ({ ...g, [groupName]: !g[groupName] }))}
                           aria-expanded={expanded}
                         >
@@ -241,28 +258,34 @@ export default function RulesPage() {
                                 key={rule.id ?? rule.ruleKey}
                                 className={`flex flex-wrap items-center gap-3 rounded-lg border px-3.5 py-2.5 transition-colors ${
                                   rule.enabled
-                                    ? 'border-border bg-background'
-                                    : 'border-dashed border-border-strong bg-zinc-50/40 opacity-70 dark:bg-zinc-800/20'
+                                    ? 'border-border/70 bg-white/50 dark:bg-white/[0.05]'
+                                    : 'border-dashed border-border-strong bg-white/25 opacity-70 dark:bg-white/[0.03]'
                                 }`}
                               >
                                 <Switch checked={rule.enabled} onCheckedChange={(v) => patchRule(rule, { enabled: v })} />
                                 <div className="min-w-0 flex-1">
                                   <div className="text-sm font-medium">{rule.name}</div>
                                   <div className="font-mono text-[11px] text-foreground-subtle">{rule.ruleKey}</div>
+                                  <Input
+                                    className="mt-1.5 h-8 text-xs"
+                                    value={rule.description ?? ''}
+                                    onChange={(e) => patchRule(rule, { description: e.target.value })}
+                                    placeholder="内容说明（留空则用检测结果动态描述）"
+                                  />
+                                  <Input
+                                    className="mt-1.5 h-8 text-xs"
+                                    value={rule.deliverable ?? ''}
+                                    onChange={(e) => patchRule(rule, { deliverable: e.target.value })}
+                                    placeholder="交付成果（留空则使用预设文案）"
+                                  />
                                 </div>
-                                <Badge color={rule.severity === 'critical' ? 'red' : rule.severity === 'warning' ? 'amber' : 'gray'}>
-                                  {severityText[rule.severity]}
-                                </Badge>
-                                <Select
-                                  value={rule.severity}
-                                  onChange={(v) => patchRule(rule, { severity: v as Severity })}
-                                  options={[
-                                    { value: 'critical', label: '必须' },
-                                    { value: 'warning', label: '警告' },
-                                    { value: 'suggest', label: '建议' }
-                                  ]}
-                                  className="h-8"
-                                />
+                                <label className="flex items-center gap-1.5 text-xs text-foreground-muted" title="开启后检测直接按「通过」计，跳过实际检测">
+                                  <Switch
+                                    checked={rule.params?.defaultPass === true}
+                                    onCheckedChange={(v) => patchRule(rule, { params: { ...rule.params, defaultPass: v } })}
+                                  />
+                                  默认通过
+                                </label>
                                 <Button variant="ghost" size="sm" onClick={() => removeRule(rule)}>
                                   <Trash2 className="h-3.5 w-3.5 text-danger" />
                                 </Button>
@@ -313,8 +336,8 @@ export default function RulesPage() {
         <div className="space-y-2">
           <p className="text-xs text-foreground-subtle">点击规则将其加入当前规则集；重复规则会自动跳过。</p>
           {Array.from(new Map(catalog.map((r) => [r.groupName, r])).keys()).map((groupName) => (
-            <div key={groupName} className="overflow-hidden rounded-md border border-border">
-              <div className="border-b border-border bg-zinc-50/60 px-3 py-1.5 text-sm font-medium dark:bg-zinc-800/30">{groupName}</div>
+            <div key={groupName} className="overflow-hidden rounded-xl border border-border/60 bg-white/45 dark:bg-white/[0.04]">
+              <div className="border-b border-border/60 bg-white/40 px-3 py-1.5 text-sm font-medium dark:bg-white/[0.04]">{groupName}</div>
               <div className="divide-y divide-border/70">
                 {catalog.filter((r) => r.groupName === groupName).map((item) => {
                   const added = rules.some((r) => r.ruleKey === item.ruleKey)
@@ -323,13 +346,10 @@ export default function RulesPage() {
                       key={item.ruleKey}
                       onClick={() => addRule(item)}
                       disabled={added}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-zinc-50/70 disabled:opacity-45 disabled:hover:bg-transparent dark:hover:bg-zinc-800/40"
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-white/55 disabled:opacity-45 disabled:hover:bg-transparent dark:hover:bg-white/[0.05]"
                     >
                       <span className="flex items-center gap-2">
                         <span>{item.name}</span>
-                        <Badge color={item.severity === 'critical' ? 'red' : item.severity === 'warning' ? 'amber' : 'gray'}>
-                          {severityText[item.severity]}
-                        </Badge>
                       </span>
                       <span className="text-xs text-foreground-subtle">{added ? '已添加' : '＋ 添加'}</span>
                     </button>
