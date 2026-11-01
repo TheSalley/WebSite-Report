@@ -10,8 +10,17 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
   const ruleSet = await getRuleSet(t.ruleSetId)
   const running = getRunningState(Number(id))
   return NextResponse.json({
-    ...t,
+    id: t.id,
+    siteId: t.siteId,
+    ruleSetId: t.ruleSetId,
+    status: t.status,
+    passCount: t.passCount,
+    warnCount: t.warnCount,
+    failCount: t.failCount,
+    skipCount: t.skipCount,
     verifyCount: t.verifyCount ?? 0,
+    startedAt: t.startedAt,
+    finishedAt: t.finishedAt,
     error: t.error ?? null,
     pagespeed: t.pagespeedJson ? JSON.parse(t.pagespeedJson) : null,
     pageSet: t.pageSetJson ? JSON.parse(t.pageSetJson) : null,
@@ -19,7 +28,19 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
     site,
     ruleSet,
     progress: running
-      ? { done: running.done, total: running.total, ruleKey: running.currentRuleKey, ruleName: running.currentRuleName, status: running.lastStatus, error: running.error }
+      ? {
+          done: running.done,
+          total: running.total,
+          ruleKey: running.currentRuleKey,
+          ruleName: running.currentRuleName,
+          status: running.lastStatus,
+          error: running.error,
+          phase: running.phase,
+          phaseName: running.phaseName,
+          phaseIndex: running.phaseIndex,
+          phaseCount: running.phaseCount,
+          queued: running.queued
+        }
       : null
   })
 }

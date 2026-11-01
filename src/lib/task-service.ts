@@ -1,10 +1,10 @@
 import { join } from 'path'
 
 import { DATA_DIR } from './store'
-import type { CheckStatus, PageSpeedReportData } from './types'
+import type { CheckStatus } from './types'
 import { runTask, shutdownEngine } from './engine/runner'
 import { buildPageSet, type PageSetResult } from './engine/page-set'
-import { computeScore } from './engine/scoring'
+import { countResults } from './engine/scoring'
 import { getBrowser } from './engine/browser'
 import { fetchPageSpeed } from './engine/pagespeed'
 import { capturePagespeedShots } from './pagespeed-shots'
@@ -26,12 +26,34 @@ import {
 import type { RuleRow } from './store'
 import { logInfo, logWarn, logError } from './logger'
 
+/** 任务阶段：排队 → 枚举站点页面 → 规则检测 → PageSpeed 评分与截图 */
+export type TaskPhaseId = 'queued' | 'enum' | 'detect' | 'pagespeed'
+
+/** 任务阶段定义（供前端展示阶段进度） */
+export interface TaskPhase {
+  id: TaskPhaseId
+  name: string
+  done: number
+  total: number
+}
+
 /** 运行中任务的状态（进程内存） */
 export interface RunningTaskState {
   taskId: number
   signal: { cancelled: boolean }
+  /** 当前阶段 */
+  phase: TaskPhaseId
+  /** 当前阶段显示名 */
+  phaseName: string
+  /** 当前阶段序号（1 起，如「阶段 2/3」） */
+  phaseIndex: number
+  /** 阶段总数 */
+  phaseCount: number
+  /** 当前阶段进度 */
   done: number
   total: number
+  /** 是否排队等待执行（并发队列，默认同时 1 个） */
+  queued: boolean
   currentRuleKey: string
   currentRuleName: string
   lastStatus: CheckStatus | null
@@ -39,6 +61,31 @@ export interface RunningTaskState {
 }
 
 const runningTasks = new Map<number, RunningTaskState>()
+
+/**
+ * 并发执行队列：默认同时执行 1 个任务，其余排队等待。
+ * 多个任务共享单一 Chromium，避免 context/page 无界增长互相拖慢。
+ * 可通过环境变量 WSR_MAX_CONCURRENT_RUNS 调整并发上限。
+ */
+const MAX_CONCURRENT_RUNS = Number(process.env.WSR_MAX_CONCURRENT_RUNS) || 1
+let activeRuns = 0
+const runQueue: (() => void)[] = []
+
+/** 等待一个空闲任务位（满员时排队） */
+async function acquireRunSlot(): Promise<void> {
+  if (activeRuns < MAX_CONCURRENT_RUNS) {
+    activeRuns++
+    return
+  }
+  await new Promise<void>((resolve) => runQueue.push(resolve))
+}
+
+/** 释放任务位：优先让给队首等待者（槽位直接转移），否则减少活跃数 */
+function releaseRunSlot(): void {
+  const next = runQueue.shift()
+  if (next) next()
+  else activeRuns--
+}
 
 export function getRunningState(taskId: number): RunningTaskState | null {
   return runningTasks.get(taskId) ?? null
@@ -74,8 +121,13 @@ export async function startTask(siteId: number, ruleSetId: number): Promise<numb
   const state: RunningTaskState = {
     taskId,
     signal: { cancelled: false },
+    phase: 'queued',
+    phaseName: '排队中',
+    phaseIndex: 0,
+    phaseCount: 0,
     done: 0,
-    total: rules.length,
+    total: 0,
+    queued: true,
     currentRuleKey: '',
     currentRuleName: '',
     lastStatus: null,
@@ -93,18 +145,51 @@ export async function startTask(siteId: number, ruleSetId: number): Promise<numb
 /** 后台执行引擎并保存结果 */
 async function runInBackground(taskId: number, url: string, scanPages: boolean, rules: RuleRow[], state: RunningTaskState): Promise<void> {
   const startMillis = Date.now()
+  // 并发队列：等待空闲任务位（排队期间前端展示「排队中」）
+  await acquireRunSlot()
+  state.queued = false
   try {
+    // 排队期间被取消：直接收尾，不占用任务位
+    if (state.signal.cancelled) {
+      logWarn('排队期间任务被取消', taskId)
+      await updateTask(taskId, { status: 'stopped', finishedAt: new Date().toISOString() })
+      return
+    }
+
+    const hasPagespeedRule = rules.some((r) => r.ruleKey === 'perf.pagespeed.score')
+    // 阶段序列：枚举 → 规则检测 → PageSpeed 评分与截图（按规则集配置裁剪）
+    const phases: TaskPhase[] = []
+    if (scanPages) phases.push({ id: 'enum', name: '枚举站点页面', done: 0, total: 0 })
+    phases.push({ id: 'detect', name: '规则检测', done: 0, total: 0 })
+    if (hasPagespeedRule) phases.push({ id: 'pagespeed', name: 'PageSpeed 评分与截图', done: 0, total: 0 })
+    state.phaseCount = phases.length
+    let phaseCursor = 0
+    /** 进入阶段：重置进度与当前规则，避免跨阶段跳变 */
+    const enterPhase = (id: TaskPhaseId, name: string, done: number, total: number): void => {
+      const idx = phases.findIndex((p) => p.id === id)
+      if (idx >= 0) phaseCursor = idx
+      state.phase = id
+      state.phaseName = name
+      state.phaseIndex = phaseCursor + 1
+      state.done = done
+      state.total = total
+      state.currentRuleKey = ''
+      state.currentRuleName = ''
+      state.lastStatus = null
+    }
+
     // 多页面模板检查：sitemap 枚举 + 模板去重，仅检测代表页
     let pages: string[] = [url]
     let pageSetResult: PageSetResult | undefined
     if (scanPages) {
+      enterPhase('enum', '枚举站点页面', 0, 0)
       pageSetResult = await buildPageSet(url, {
         signal: state.signal,
         onClassify: (doneCount, totalCount) => {
           state.done = doneCount
           state.total = totalCount
           state.currentRuleKey = 'page-set'
-          state.currentRuleName = '枚举站点页面'
+          state.currentRuleName = '分类页面 ' + doneCount + '/' + totalCount
           state.lastStatus = null
         }
       })
@@ -125,8 +210,9 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
       }
       // 站点级规则整站只跑 1 次，页面级规则按代表页执行
       const siteCount = rules.filter((r) => r.scope === 'site').length
-      state.done = 0
-      state.total = siteCount + (rules.length - siteCount) * pages.length
+      enterPhase('detect', '规则检测', 0, siteCount + (rules.length - siteCount) * pages.length)
+    } else {
+      enterPhase('detect', '规则检测', 0, rules.length)
     }
 
     const result = await runTask({
@@ -154,15 +240,14 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
         taskId,
         result.results.map((r) => ({ ...r, taskId, checkedAt: new Date().toISOString() }))
       )
-      const score = result.score
+      const counts = result.counts
       await updateTask(taskId, {
         status: 'stopped',
-        score: score.score,
-        passCount: score.passCount,
-        warnCount: score.warnCount,
-        failCount: score.failCount,
-        skipCount: score.skipCount,
-        verifyCount: score.verifyCount,
+        passCount: counts.passCount,
+        warnCount: counts.warnCount,
+        failCount: counts.failCount,
+        skipCount: counts.skipCount,
+        verifyCount: counts.verifyCount,
         finishedAt: new Date().toISOString()
       })
       return
@@ -177,14 +262,13 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
         checkedAt: new Date().toISOString()
       }))
     )
-    const score = result.score
+    const counts = result.counts
     await updateTask(taskId, {
-      score: score.score,
-      passCount: score.passCount,
-      warnCount: score.warnCount,
-      failCount: score.failCount,
-      skipCount: score.skipCount,
-      verifyCount: score.verifyCount
+      passCount: counts.passCount,
+      warnCount: counts.warnCount,
+      failCount: counts.failCount,
+      skipCount: counts.skipCount,
+      verifyCount: counts.verifyCount
     })
     // 持久化站点级规则的结构化数据（如交付检查逐页明细），供报告按页面表格渲染
     if (result.siteData && Object.keys(result.siteData).length > 0) {
@@ -192,17 +276,17 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
     }
 
     // PageSpeed 评分：优先复用站点级规则 perf.pagespeed.score 已采集的数据，否则任务层独立采集
-    const rulePs = result.siteData?.['perf.pagespeed.score'] as PageSpeedReportData | undefined
+    const rulePs = result.siteData?.['perf.pagespeed.score']
     // PageSpeed 评分与截图仅在建站服务合同验收等含 perf.pagespeed.score 规则的规则集执行；网站交付检查等其他规则集不采集
-    const hasPagespeedRule = rules.some((r) => r.ruleKey === 'perf.pagespeed.score')
-    state.currentRuleKey = 'pagespeed'
-    state.currentRuleName = 'PageSpeed 评分与截图'
     logInfo('开始采集 PageSpeed 评分与截图', taskId)
     if (!hasPagespeedRule) {
       logInfo('规则集未包含 PageSpeed 规则（perf.pagespeed.score），跳过 PageSpeed 评分与截图', taskId)
     } else if (state.signal.cancelled) {
       logWarn('PageSpeed 采集前已被取消，跳过', taskId)
     } else {
+      enterPhase('pagespeed', 'PageSpeed 评分与截图', 0, 1)
+      state.currentRuleKey = 'pagespeed'
+      state.currentRuleName = '采集页面性能评分'
       if (rulePs) {
         await updateTask(taskId, { pagespeedJson: JSON.stringify(rulePs) })
         logInfo('PageSpeed 评分已由站点级规则 perf.pagespeed.score 采集', taskId)
@@ -219,6 +303,7 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
       if (state.signal.cancelled) {
         logWarn('PageSpeed 截图前检测到取消，跳过截图', taskId)
       } else {
+        state.currentRuleName = '保存页面截图'
         try {
           await capturePagespeedShots(taskId, url, state.signal)
           logInfo('PageSpeed 页面截图完成', taskId)
@@ -226,6 +311,7 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
           logError('PageSpeed 截图异常（任务已尽力，不影响主结果）', e, taskId)
         }
       }
+      state.done = 1
     }
 
     // 全部采集完成后再收尾：任务状态与完成时间（检测时间包含 PageSpeed 截图耗时）
@@ -246,6 +332,7 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
     logError('任务执行失败', e, taskId)
   } finally {
     runningTasks.delete(taskId)
+    releaseRunSlot()
   }
 }
 
@@ -283,19 +370,18 @@ export async function updateDeliverable(resultId: number, deliverable: string): 
   await updateCheckResultDeliverable(resultId, deliverable)
 }
 
-/** 人工验收：更新结果状态并重算所属任务的得分与统计 */
+/** 人工验收：更新结果状态并重算统计（不计算综合评分） */
 export async function updateResultStatus(resultId: number, status: CheckStatus): Promise<void> {
   const row = await updateCheckResultStatus(resultId, status)
   if (!row) return
   const all = await listCheckResults(row.taskId)
-  const score = computeScore(all.map((r) => ({ status: r.status })))
+  const counts = countResults(all.map((r) => ({ status: r.status })))
   await updateTask(row.taskId, {
-    score: score.score,
-    passCount: score.passCount,
-    warnCount: score.warnCount,
-    failCount: score.failCount,
-    skipCount: score.skipCount,
-    verifyCount: score.verifyCount
+    passCount: counts.passCount,
+    warnCount: counts.warnCount,
+    failCount: counts.failCount,
+    skipCount: counts.skipCount,
+    verifyCount: counts.verifyCount
   })
 }
 

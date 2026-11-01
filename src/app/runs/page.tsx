@@ -6,9 +6,23 @@ import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock, Im
 import { Button, Card, Dialog, Input, Select, Empty, Spinner, StatusBadge } from '@/components/ui'
 import type { Task, Site, RuleSet, CheckResult } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
+import { pageLabel } from '@/lib/display'
+import { fmtTime, groupResultsByPage, psShotUrl, statusCounts, STATUS_FILTERS } from '@/lib/runs-view'
 
 type TaskRow = Task & {
-  progress: { done: number; total: number; ruleKey: string; ruleName: string; status: string; error?: string } | null
+  progress: {
+    done: number
+    total: number
+    ruleKey: string
+    ruleName: string
+    status: string
+    error?: string
+    phase?: string
+    phaseName?: string
+    phaseIndex?: number
+    phaseCount?: number
+    queued?: boolean
+  } | null
 }
 
 type TaskListResponse = {
@@ -240,33 +254,10 @@ export default function RunsPage() {
     }
   }
 
-  const psShotUrl = (strategy: 'mobile' | 'desktop') =>
-    selectedTask ? `/api/screenshots/task-${selectedTask.id}/pagespeed-${strategy}.png?v=${shotVersion}` : ''
-
   const reportUrl = selectedTask ? `/reports/${selectedTask.id}` : ''
   const filteredResults = results.filter((r) => statusFilter === 'all' || r.status === statusFilter)
-  const pageGroups = new Map<string, CheckResult[]>()
-  for (const r of filteredResults) {
-    const key = r.pageUrl || ''
-    const arr = pageGroups.get(key) ?? []
-    arr.push(r)
-    pageGroups.set(key, arr)
-  }
-  const pageLabel = (u: string) => {
-    if (!u) return '主页'
-    try {
-      const x = new URL(u)
-      return (x.hostname + (x.port ? ':' + x.port : '') + (x.pathname === '/' ? '' : x.pathname)).slice(0, 64)
-    } catch {
-      return u.slice(0, 64)
-    }
-  }
-
+  const pageGroups = groupResultsByPage(filteredResults)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-
-  const statusCounts = (key: 'pass' | 'warn' | 'fail' | 'skip' | 'verify' | 'all') => results.filter((r) => r.status === key).length
-
-  const fmtTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—')
 
   return (
     <div className="space-y-6">
@@ -342,15 +333,23 @@ export default function RunsPage() {
                       {t.status === 'running' && t.progress ? (
                         <div className="space-y-1.5">
                           <StatusBadge status={t.status} />
-                          <div className="text-[11px] text-foreground-subtle">
-                            {t.progress.done}/{t.progress.total} · {t.progress.ruleName}
-                          </div>
-                          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-white/60 shadow-inner dark:bg-white/10">
-                            <div
-                              className="h-full rounded-full bg-primary transition-all duration-500"
-                              style={{ width: `${Math.round((t.progress.done / Math.max(t.progress.total, 1)) * 100)}%` }}
-                            />
-                          </div>
+                          {t.progress.queued ? (
+                            <div className="text-[11px] text-foreground-subtle">排队中，等待空闲任务位…</div>
+                          ) : (
+                            <>
+                              <div className="text-[11px] text-foreground-subtle">
+                                {t.progress.phaseName ? t.progress.phaseName + ' ' : ''}
+                                {t.progress.done}/{t.progress.total}
+                                {t.progress.ruleName ? ' · ' + t.progress.ruleName : ''}
+                              </div>
+                              <div className="h-1.5 w-28 overflow-hidden rounded-full bg-white/60 shadow-inner dark:bg-white/10">
+                                <div
+                                  className="h-full rounded-full bg-primary transition-all duration-500"
+                                  style={{ width: `${Math.round((t.progress.done / Math.max(t.progress.total, 1)) * 100)}%` }}
+                                />
+                              </div>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <StatusBadge status={t.status} />
@@ -535,19 +534,19 @@ export default function RunsPage() {
                 <div className="grid flex-1 grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
                   <div>
                     <div className="text-xs text-foreground-subtle">通过</div>
-                    <div className="text-lg font-bold text-success">{statusCounts('pass')}</div>
+                    <div className="text-lg font-bold text-success">{statusCounts(results, 'pass')}</div>
                   </div>
                   <div>
                     <div className="text-xs text-foreground-subtle">失败</div>
-                    <div className="text-lg font-bold text-danger">{statusCounts('fail')}</div>
+                    <div className="text-lg font-bold text-danger">{statusCounts(results, 'fail')}</div>
                   </div>
                   <div>
                     <div className="text-xs text-foreground-subtle">跳过</div>
-                    <div className="text-lg font-bold text-foreground-muted">{statusCounts('skip')}</div>
+                    <div className="text-lg font-bold text-foreground-muted">{statusCounts(results, 'skip')}</div>
                   </div>
                   <div>
                     <div className="text-xs text-foreground-subtle">待验收</div>
-                    <div className="text-lg font-bold text-primary">{statusCounts('verify')}</div>
+                    <div className="text-lg font-bold text-primary">{statusCounts(results, 'verify')}</div>
                   </div>
                 </div>
               </div>
@@ -571,18 +570,18 @@ export default function RunsPage() {
             ) : (
               <>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
-                  {(['all', 'pass', 'fail', 'skip', 'verify'] as const).map((s) => (
+                  {STATUS_FILTERS.map(({ key: fkey, label }) => (
                     <button
-                      key={s}
-                      onClick={() => setStatusFilter(s)}
+                      key={fkey}
+                      onClick={() => setStatusFilter(fkey)}
                       className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                        statusFilter === s
+                        statusFilter === fkey
                           ? 'bg-primary text-primary-foreground shadow-sm'
                           : 'bg-zinc-100 text-foreground-muted hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700'
                       }`}
                     >
-                      {s === 'all' ? '全部' : { pass: '通过', fail: '失败', skip: '跳过', verify: '待验收' }[s]}
-                      <span className="ml-1 opacity-70">{statusCounts(s)}</span>
+                      {label}
+                      <span className="ml-1 opacity-70">{statusCounts(results, fkey)}</span>
                     </button>
                   ))}
                 </div>
@@ -613,10 +612,10 @@ export default function RunsPage() {
                       </div>
                       <div className="p-3">
                         <img
-                          src={psShotUrl(strategy)}
+                          src={psShotUrl(selectedTask?.id ?? null, strategy, shotVersion)}
                           alt={`PageSpeed ${strategy === 'mobile' ? '移动端' : '桌面端'} 截图`}
                           className="max-h-64 w-full cursor-zoom-in rounded-md border border-border object-contain"
-                          onClick={() => window.open(psShotUrl(strategy), '_blank')}
+                          onClick={() => window.open(psShotUrl(selectedTask?.id ?? null, strategy, shotVersion), '_blank')}
                           onError={(e) => {
                             ;(e.target as HTMLImageElement).style.display = 'none'
                           }}
@@ -631,7 +630,7 @@ export default function RunsPage() {
                 {Array.from(pageGroups.entries()).map(([purl, items]) => (
                   <div key={purl || '__home__'} className="mb-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-medium text-foreground">{pageLabel(purl)}</span>
+                      <span className="font-medium text-foreground">{pageLabel(purl, { max: 64 })}</span>
                       <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-foreground-muted dark:bg-zinc-800">{items.length} 项</span>
                       {purl && <span className="truncate text-foreground-subtle">{purl}</span>}
                     </div>

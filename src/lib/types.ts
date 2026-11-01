@@ -68,6 +68,23 @@ export interface RuleInput {
   sortOrder?: number
 }
 
+/** Elementor 隐藏板块明细项（报告逐页明细使用） */
+export interface ElementorHiddenItem {
+  tag: string
+  id: string
+  classes: string
+  text: string
+}
+
+/** 站点级规则附带的结构化数据（按 ruleKey 类型化；动态 ruleKey 通过索引签名兜底） */
+export interface SiteDataByRuleKey {
+  'perf.pagespeed.score'?: PageSpeedReportData
+  'delivery.h1.count'?: { pages: { url: string; h1s: string[] }[] }
+  'delivery.elementor.hidden-both'?: { pages: { url: string; items: ElementorHiddenItem[] }[] }
+  'delivery.sitemap'?: unknown
+  [ruleKey: string]: unknown
+}
+
 /** 检测页面集：单个代表页 */
 export interface TaskPageSetPage {
   url: string
@@ -92,7 +109,6 @@ export interface Task {
   siteId: number
   ruleSetId: number
   status: TaskStatus
-  score: number | null
   passCount: number
   warnCount: number
   failCount: number
@@ -108,8 +124,8 @@ export interface Task {
   pagespeed?: PageSpeedReportData | null
   /** 检测页面集合（sitemap 枚举 + 模板去重结果，多页面任务才有） */
   pageSet?: TaskPageSet | null
-  /** 站点级规则的结构化数据（按 ruleKey，如交付检查逐页明细，报告按页面表格使用） */
-  siteData?: Record<string, unknown> | null
+  /** 站点级规则的结构化数据（按 ruleKey 类型化；报告按页面表格使用） */
+  siteData?: SiteDataByRuleKey | null
 }
 
 export interface TaskInput {

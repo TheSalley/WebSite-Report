@@ -22,7 +22,6 @@ export async function GET(request: Request) {
       siteId: t.siteId,
       ruleSetId: t.ruleSetId,
       status: t.status,
-      score: t.score,
       passCount: t.passCount,
       warnCount: t.warnCount,
       failCount: t.failCount,
@@ -37,7 +36,18 @@ export async function GET(request: Request) {
       site: sites.get(t.siteId) ?? null,
       ruleSet: sets.get(t.ruleSetId) ?? null,
       progress: run
-        ? { done: run.done, total: run.total, ruleKey: run.currentRuleKey, ruleName: run.currentRuleName, status: run.lastStatus }
+        ? {
+            done: run.done,
+            total: run.total,
+            ruleKey: run.currentRuleKey,
+            ruleName: run.currentRuleName,
+            status: run.lastStatus,
+            phase: run.phase,
+            phaseName: run.phaseName,
+            phaseIndex: run.phaseIndex,
+            phaseCount: run.phaseCount,
+            queued: run.queued
+          }
         : null
     }
   })

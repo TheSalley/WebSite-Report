@@ -1,4 +1,5 @@
 import type { Page, APIRequestContext } from 'playwright'
+import type { ElementorHiddenItem } from '../types'
 
 /** 页面快照：一次浏览器检测采集到的全部原始数据，供所有规则共享 */
 export interface PageSnapshot {
@@ -15,7 +16,7 @@ export interface PageSnapshot {
   /** 页面内 h1 列表 */
   h1s: string[]
   /** Elementor 中同时含 elementor-hidden-desktop 与 elementor-hidden-mobile class 的元素（桌面+移动端同时隐藏） */
-  elementorHiddenBoth: { tag: string; id: string; classes: string; text: string }[]
+  elementorHiddenBoth: ElementorHiddenItem[]
   /** 模板签名：过滤实例噪音（page-id/postid/slug 等）后的 body class 集合，用于模板级去重 */
   templateSignature: string
   /** 页面内全部链接 href */

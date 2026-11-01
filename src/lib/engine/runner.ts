@@ -3,11 +3,11 @@ import { attachNetworkCollector } from './network-collector'
 import { captureSnapshot } from './snapshot'
 import { ScreenshotManager } from './screenshot-manager'
 import { getRuleHandler } from './rules'
-import { computeScore, type ScoreResult } from './scoring'
+import { countResults, type ResultCounts } from './scoring'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { PageSnapshot, RuleContext, RuleOutcome } from './types'
-import type { CheckStatus } from '../types'
+import type { CheckStatus, SiteDataByRuleKey } from '../types'
 import { logInfo, logWarn, logError } from '../logger'
 
 export interface RunTaskOptions {
@@ -46,9 +46,9 @@ export interface RunRuleResult {
 /** 任务运行结果 */
 export interface RunResult {
   results: RunRuleResult[]
-  score: ScoreResult
-  /** 站点级规则附带采集的原始数据（按 ruleKey 存储，供任务层持久化展示） */
-  siteData?: Record<string, unknown>
+  counts: ResultCounts
+  /** 站点级规则附带采集的原始数据（按 ruleKey 类型化，供任务层持久化展示） */
+  siteData?: SiteDataByRuleKey
 }
 
 type RuleDef = RunTaskOptions['rules'][number]
@@ -57,7 +57,7 @@ type RuleDef = RunTaskOptions['rules'][number]
  * 执行一次完整检测任务（可覆盖多个页面）：
  * 1. 逐页打开浏览器并按规则检测
  * 2. 失败/警告项自动截屏取证
- * 3. 聚合全部页面结果并计算得分
+ * 3. 聚合全部页面结果并统计各状态数量
  */
 export async function runTask(options: RunTaskOptions): Promise<RunResult> {
   const { pages, rules, taskId } = options
@@ -67,7 +67,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
   const pageRules = enabledRules.filter((r) => r.scope !== 'site')
   const total = siteRules.length + pageRules.length * pages.length
   let done = 0
-  const siteData: Record<string, unknown> = {}
+  const siteData: SiteDataByRuleKey = {}
   const pageSnapshots: { url: string; snapshot: PageSnapshot }[] = []
 
   logInfo(`开始检测任务 taskId=${taskId} 页面数=${pages.length} 启用规则数=${enabledRules.length}（共 ${total} 项）`, taskId)
@@ -267,6 +267,14 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           expected: '按合同约定完成并确认',
           description: '该规则已配置为默认通过，无需实际检测'
         }
+      } else if (rule.ruleKey.startsWith('verify.')) {
+        // 人工交付项：不做自动检测，标记为「待人工验收」（与页面级规则一致）
+        outcome = {
+          status: 'verify',
+          actual: '待人工验收',
+          expected: '按合同约定完成并确认',
+          description: '人工交付项，需验收人员确认后更新状态'
+        }
       } else {
         outcome = { status: 'fail', actual: '', expected: '', description: '规则未实现' }
         const handler = getRuleHandler(rule.ruleKey)
@@ -339,8 +347,8 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
   }
 
   logInfo(`检测完成，规则结果数=${results.length}`, taskId)
-  const score = computeScore(results.map((r) => ({ status: r.status })))
-  return { results, score, siteData: Object.keys(siteData).length > 0 ? siteData : undefined }
+  const counts = countResults(results.map((r) => ({ status: r.status })))
+  return { results, counts, siteData: Object.keys(siteData).length > 0 ? siteData : undefined }
 }
 
 export async function shutdownEngine(): Promise<void> {

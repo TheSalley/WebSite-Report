@@ -225,33 +225,3 @@ export function StatusBadge({ status }: { status: string }) {
   const item = map[status] ?? { label: status, color: 'gray' as const }
   return <Badge color={item.color}>{item.label}</Badge>
 }
-
-/* ── 得分环 ── */
-export function ScoreRing({ score, size = 88 }: { score: number; size?: number }) {
-  const color = score >= 90 ? 'var(--success)' : score >= 70 ? 'var(--warning)' : 'var(--danger)'
-  const r = (size - 10) / 2
-  const c = 2 * Math.PI * r
-  const offset = c * (1 - Math.min(Math.max(score, 0), 100) / 100)
-  return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth="8" />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={c}
-          strokeDashoffset={offset}
-          className="transition-all duration-700"
-        />
-      </svg>
-      <span className="absolute font-mono text-2xl font-bold" style={{ color }}>
-        {score}
-      </span>
-    </div>
-  )
-}

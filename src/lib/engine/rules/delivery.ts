@@ -1,23 +1,15 @@
 import type { RuleHandler } from '../types'
 import { discoverSitemapUrls, collectSitemapLocsGrouped } from '../page-set'
+import { pagePathShort } from '../../display'
+import type { ElementorHiddenItem } from '../../types'
 
 /** 单条 Elementor 隐藏板块的展示文本（规则描述与报告明细表共用） */
-export function describeElementorItem(e: { tag: string; id: string; classes: string; text: string }): string {
+export function describeElementorItem(e: ElementorHiddenItem): string {
   const parts = [e.tag]
   if (e.id) parts.push(`#${e.id}`)
   if (e.classes) parts.push(`[${e.classes}]`)
   if (e.text) parts.push(`“${e.text}”`)
   return parts.join(' ')
-}
-
-/** 缩短页面 URL 显示：仅保留路径（主页显示为 /） */
-function pageShort(url: string): string {
-  try {
-    const x = new URL(url)
-    return x.pathname === '/' ? '/' : x.pathname
-  } catch {
-    return url
-  }
 }
 
 export const deliveryRules: Record<string, RuleHandler> = {
@@ -32,10 +24,10 @@ export const deliveryRules: Record<string, RuleHandler> = {
         description: '未采集到任何代表页面快照，无法汇总 H1'
       }
     }
-    const missing = pages.filter((p) => p.snapshot.h1s.length === 0).map((p) => pageShort(p.url))
+    const missing = pages.filter((p) => p.snapshot.h1s.length === 0).map((p) => pagePathShort(p.url))
     const multiple = pages
       .filter((p) => p.snapshot.h1s.length > 1)
-      .map((p) => `${pageShort(p.url)}（${p.snapshot.h1s.length} 个）`)
+      .map((p) => `${pagePathShort(p.url)}（${p.snapshot.h1s.length} 个）`)
     const status = missing.length > 0 ? 'fail' : multiple.length > 0 ? 'warn' : 'pass'
     const list = (arr: string[]) => (arr.length === 0 ? '无' : arr.slice(0, 8).join('、') + (arr.length > 8 ? ` 等 ${arr.length} 个` : ''))
     const detail = missing.length > 0 ? `缺 h1：${list(missing)}` : multiple.length > 0 ? `h1 重复：${list(multiple)}` : `全部 ${pages.length} 页 h1 均唯一`
@@ -54,7 +46,7 @@ export const deliveryRules: Record<string, RuleHandler> = {
     const pages = pageSnapshots ?? []
     const describe = describeElementorItem
     const found = pages
-      .map((p) => ({ url: pageShort(p.url), items: p.snapshot.elementorHiddenBoth }))
+      .map((p) => ({ url: pagePathShort(p.url), items: p.snapshot.elementorHiddenBoth }))
       .filter((x) => x.items.length > 0)
     const n = found.reduce((sum, x) => sum + x.items.length, 0)
     const detail = found
