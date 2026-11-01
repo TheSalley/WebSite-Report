@@ -1,0 +1,38 @@
+2026-10-08T08:14:57.300Z [INFO] [task:19] 任务创建，site=中步擎天 ruleset=建站服务合同验收 共26条规则
+2026-10-08T08:14:57.300Z [INFO] [task:19] 开始检测任务 taskId=19 url=https://www.chintiyantech.com/ 启用规则数=26
+2026-10-08T08:15:03.977Z [INFO] [task:19] 执行规则 verify.plan.cycle（建站周期）
+2026-10-08T08:15:03.978Z [INFO] [task:19] 执行规则 verify.plan.strategy（网站建设规划）
+2026-10-08T08:15:03.978Z [INFO] [task:19] 执行规则 verify.plan.style（精选样式库）
+2026-10-08T08:15:03.978Z [INFO] [task:19] 执行规则 verify.build.banner（Banner 创意设计(3 张)）
+2026-10-08T08:15:03.979Z [INFO] [task:19] 执行规则 verify.build.pages（常规页面搭建）
+2026-10-08T08:15:03.980Z [INFO] [task:19] 执行规则 content.viewport（响应式设计（移动端 viewport 正确））
+2026-10-08T08:15:03.980Z [INFO] [task:19] 执行规则 contract.contact（多转化入口）
+2026-10-08T08:15:03.980Z [INFO] [task:19] 执行规则 contract.search（全站搜索功能）
+2026-10-08T08:15:03.980Z [INFO] [task:19] 执行规则 compliance.privacy（隐私政策页）
+2026-10-08T08:15:03.981Z [INFO] [task:19] 执行规则 contract.gtranslate（Google 翻译插件）
+2026-10-08T08:15:04.592Z [INFO] [task:19] 执行规则 verify.build.thanks（感谢页跳转跟踪）
+2026-10-08T08:15:04.592Z [INFO] [task:19] 执行规则 contract.ga（GA 预埋）
+2026-10-08T08:15:04.592Z [INFO] [task:19] 执行规则 security.https（HTTPS 安全证书部署）
+2026-10-08T08:15:04.593Z [INFO] [task:19] 执行规则 verify.optimize.html（HTML 优化）
+2026-10-08T08:15:04.593Z [INFO] [task:19] 执行规则 verify.optimize.server（基础AWS 海外服务器）
+2026-10-08T08:15:04.593Z [INFO] [task:19] 执行规则 verify.optimize.firewall（免费版防火墙）
+2026-10-08T08:15:04.593Z [INFO] [task:19] 执行规则 verify.optimize.cdn（安全与CDN 加速服务）
+2026-10-08T08:15:04.594Z [INFO] [task:19] 执行规则 verify.admin.news（新闻管理）
+2026-10-08T08:15:04.594Z [INFO] [task:19] 执行规则 verify.admin.product（产品管理）
+2026-10-08T08:15:04.594Z [INFO] [task:19] 执行规则 verify.admin.files（多格式文件管理）
+2026-10-08T08:15:04.594Z [INFO] [task:19] 执行规则 verify.admin.youtube（YouTube 视频嵌入）
+2026-10-08T08:15:04.595Z [INFO] [task:19] 执行规则 verify.admin.mail（询盘管理）
+2026-10-08T08:15:04.595Z [INFO] [task:19] 执行规则 verify.admin.onboard（Onboard 智慧网站解决方案）
+2026-10-08T08:15:04.595Z [INFO] [task:19] 执行规则 verify.content.fill（图文填充）
+2026-10-08T08:15:04.595Z [INFO] [task:19] 执行规则 verify.content.product（产品代上传）
+2026-10-08T08:15:04.596Z [INFO] [task:19] 执行规则 verify.content.blog（新闻代上传）
+2026-10-08T08:15:04.596Z [INFO] [task:19] 检测完成，规则结果数=26
+2026-10-08T08:15:04.638Z [INFO] [task:19] 开始采集 PageSpeed 评分与截图
+2026-10-08T08:15:52.832Z [INFO] [task:19] PageSpeed 评分采集完成
+2026-10-08T08:15:54.751Z [INFO] [task:19] 等待 pagespeed.web.dev mobile 得分卡片
+2026-10-08T08:16:32.447Z [INFO] [task:19] pagespeed.web.dev mobile 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-19\pagespeed-mobile.png
+2026-10-08T08:16:32.524Z [INFO] [task:19] pagespeed.web.dev 已切换桌面设备
+2026-10-08T08:16:32.524Z [INFO] [task:19] 等待 pagespeed.web.dev desktop 得分卡片
+2026-10-08T08:16:37.133Z [INFO] [task:19] pagespeed.web.dev desktop 截图已保存: F:\Git\Next-APP\realsite\web-report-data\screenshots\task-19\pagespeed-desktop.png
+2026-10-08T08:16:37.137Z [INFO] [task:19] PageSpeed 页面截图完成
+2026-10-08T08:16:37.161Z [INFO] [task:19] 任务完成，耗时 99.9s，状态=success
