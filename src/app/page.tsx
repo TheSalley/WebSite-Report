@@ -11,7 +11,7 @@ const features = [
   {
     icon: ListChecks,
     title: '27 条内置规则',
-    desc: 'SEO、性能、安全、内容可用性、合规五维规则集，可自定义阈值与启停。',
+    desc: '内置规则库覆盖 SEO、性能、安全、内容与合规，按需勾选组成检测分组。',
     accent: 'from-emerald-500 to-teal-500'
   },
   {
@@ -22,13 +22,13 @@ const features = [
   },
   {
     icon: ShieldCheck,
-    title: 'PageSpeed 双重通道',
-    desc: '本地 Lighthouse 离线评分，配置 API Key 可切换 Google PSI 双通道。',
+    title: 'PageSpeed 性能评分',
+    desc: '调用 Google PageSpeed Insights 在线评分，覆盖移动端与桌面端。',
     accent: 'from-violet-500 to-purple-500'
   }
 ]
 
-const steps = ['添加站点', '选择规则集', '开始检测', '查看报告']
+const steps = ['添加站点', '选择分组', '开始检测', '查看报告']
 
 export default function Home() {
   return (
@@ -46,7 +46,7 @@ export default function Home() {
             网站合规性检测
           </h1>
           <p className="mt-3 max-w-2xl leading-7 text-foreground-muted">
-            输入网址，选择规则集，真实浏览器深度检测站点合规性，自动截图取证并生成交付报告。
+            输入网址，选择分组，真实浏览器深度检测站点合规性，自动截图取证并生成交付报告。
             面向质检/合规人员、项目交付与网站运营人员。
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">

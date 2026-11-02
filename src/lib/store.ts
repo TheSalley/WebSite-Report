@@ -1,4 +1,7 @@
-import { getDb, now, num, bool, str, strOrNull, type SqlRow } from './db'
+import { rm } from 'fs/promises'
+import { join } from 'path'
+
+import { DATA_DIR, getDb, now, num, bool, str, strOrNull, type SqlRow } from './db'
 import { DELIVERABLE_PRESETS } from './seed'
 export { DATA_DIR } from './db'
 
@@ -236,7 +239,7 @@ export async function duplicateRuleSet(id: number, newName: string): Promise<Rul
   try {
     const inserted = sqlite
       .prepare('INSERT INTO rule_sets (name, description, isBuiltin, scanPages, parentId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(newName, source.description, source.isBuiltin ? 1 : 0, source.scanPages ? 1 : 0, source.parentId, ts, ts)
+      .run(newName, source.description, 0, source.scanPages ? 1 : 0, source.parentId, ts, ts)
     const newId = Number(inserted.lastInsertRowid)
     const srcRules = sqlite.prepare('SELECT * FROM rules WHERE ruleSetId = ? ORDER BY id').all(id) as SqlRow[]
     const max = sqlite.prepare('SELECT MAX(id) AS m FROM rules').get() as SqlRow
@@ -396,6 +399,11 @@ export async function deleteTask(id: number): Promise<void> {
     sqlite.exec('ROLLBACK')
     throw err
   }
+  // 数据行删除成功后再清理任务独占文件；清理失败不影响删除结果
+  await Promise.allSettled([
+    rm(join(DATA_DIR, 'screenshots', `task-${id}`), { recursive: true, force: true }),
+    rm(join(DATA_DIR, 'logs', `task-${id}.log`), { force: true })
+  ])
 }
 
 /** 启动恢复：把遗留 running 但不在 activeIds（本进程正在运行）中的任务标记为「中断」（进程崩溃/重启后避免永远显示运行中） */

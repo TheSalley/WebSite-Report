@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   const siteId = Number(body?.siteId)
   const ruleSetId = Number(body?.ruleSetId)
-  if (!siteId || !ruleSetId) return NextResponse.json({ error: '站点和规则集为必填项' }, { status: 400 })
+  if (!siteId || !ruleSetId) return NextResponse.json({ error: '站点和分组为必填项' }, { status: 400 })
   try {
     const taskId = await startTask(siteId, ruleSetId)
     return NextResponse.json({ id: taskId }, { status: 201 })

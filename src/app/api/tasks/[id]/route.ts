@@ -47,7 +47,13 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
 
 export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  await deleteTask(Number(id))
+  const taskId = Number(id)
+  const task = await getTask(taskId)
+  if (!task) return NextResponse.json({ error: '任务不存在' }, { status: 404 })
+  if (task.status === 'running' || getRunningState(taskId)) {
+    return NextResponse.json({ error: '任务运行中，请先终止并等待结束再删除' }, { status: 409 })
+  }
+  await deleteTask(taskId)
   return NextResponse.json({ ok: true })
 }
 

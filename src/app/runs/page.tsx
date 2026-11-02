@@ -6,7 +6,7 @@ import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock, Im
 import { Button, Card, Dialog, Input, Select, Empty, Spinner, StatusBadge } from '@/components/ui'
 import type { Task, Site, RuleSet, CheckResult } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
-import { pageLabel } from '@/lib/display'
+import { displayUrl, pageLabel } from '@/lib/display'
 import { fmtTime, groupResultsByPage, psShotUrl, statusCounts, STATUS_FILTERS } from '@/lib/runs-view'
 
 type TaskRow = Task & {
@@ -137,11 +137,19 @@ export default function RunsPage() {
 
   const deleteTask = async (id: number) => {
     if (!confirm(`确认删除任务 #${id}？其全部检测结果与截图将被清除。`)) return
-    await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    if (selectedTask?.id === id) setSelectedTask(null)
-    // 当前页只剩一条时回到上一页，避免出现空页
-    if (tasks.length === 1 && page > 1) setPage((p) => p - 1)
-    else loadAll()
+    try {
+      const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? '删除失败')
+      }
+      if (selectedTask?.id === id) setSelectedTask(null)
+      // 当前页只剩一条时回到上一页，避免出现空页
+      if (tasks.length === 1 && page > 1) setPage((p) => p - 1)
+      else loadAll()
+    } catch (e) {
+      setError((e as Error).message)
+    }
   }
 
   const cancelTask = async (id: number) => {
@@ -265,7 +273,7 @@ export default function RunsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">检测与历史</h1>
-          <p className="mt-0.5 text-sm text-foreground-muted">选择站点与规则集，一键开展合规性检测；后台真实浏览器执行。</p>
+          <p className="mt-0.5 text-sm text-foreground-muted">选择站点与分组，一键开展合规性检测；后台真实浏览器执行。</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadAll}>
@@ -309,7 +317,7 @@ export default function RunsPage() {
                 <tr className="border-b border-border/60 bg-white/40 text-xs text-foreground-muted backdrop-blur-sm dark:bg-white/[0.04]">
                   <th className="px-4 py-3 font-medium">ID</th>
                   <th className="px-4 py-3 font-medium">站点</th>
-                  <th className="px-4 py-3 font-medium">规则集</th>
+                  <th className="px-4 py-3 font-medium">分组</th>
                   <th className="px-4 py-3 font-medium">状态</th>
                   <th className="px-4 py-3 font-medium">通过/失败</th>
                   <th className="px-4 py-3 font-medium">时间</th>
@@ -326,9 +334,9 @@ export default function RunsPage() {
                     <td className="px-4 py-3.5 font-mono text-xs text-foreground-subtle">#{t.id}</td>
                     <td className="px-4 py-3.5">
                       <div className="font-medium">{t.site?.name ?? `站点#${t.siteId}`}</div>
-                      <div className="max-w-[200px] truncate text-xs text-foreground-subtle">{t.site?.url}</div>
+                      <div className="max-w-[200px] truncate text-xs text-foreground-subtle">{displayUrl(t.site?.url ?? '')}</div>
                     </td>
-                    <td className="px-4 py-3.5 text-foreground-muted">{t.ruleSet?.name ?? `规则集#${t.ruleSetId}`}</td>
+                    <td className="px-4 py-3.5 text-foreground-muted">{t.ruleSet?.name ?? `分组#${t.ruleSetId}`}</td>
                     <td className="px-4 py-3.5">
                       {t.status === 'running' && t.progress ? (
                         <div className="space-y-1.5">
@@ -368,9 +376,11 @@ export default function RunsPage() {
                             {cancelling === t.id ? <Spinner /> : <X className="h-3.5 w-3.5" />}
                           </Button>
                         )}
-                        <Button variant="ghost" size="sm" onClick={() => deleteTask(t.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {t.status !== 'running' && (
+                          <Button variant="ghost" size="sm" onClick={() => deleteTask(t.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -424,12 +434,12 @@ export default function RunsPage() {
             <Select
               value={siteId}
               onChange={setSiteId}
-              options={sites.map((s) => ({ value: String(s.id), label: `${s.name}（${s.url}）` }))}
+              options={sites.map((s) => ({ value: String(s.id), label: `${s.name}（${displayUrl(s.url)}）` }))}
               className="w-full"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">规则集</label>
+            <label className="text-sm font-medium">分组</label>
             <Select
               value={ruleSetId}
               onChange={setRuleSetId}
@@ -484,7 +494,7 @@ export default function RunsPage() {
         >
           <div className="flex flex-wrap items-center gap-2 pb-2 text-xs text-foreground-subtle">
             <StatusBadge status={selectedTask.status} />
-            <span className="text-foreground-muted">{selectedTask.site?.url}</span>
+            <span className="text-foreground-muted">{displayUrl(selectedTask.site?.url ?? '')}</span>
             <span>·</span>
             <span>{selectedTask.ruleSet?.name}</span>
           </div>
@@ -509,7 +519,7 @@ export default function RunsPage() {
                   {selectedTask.pageSet.sitemaps.map((sm) => (
                     <span key={sm} className="inline-flex max-w-full items-center gap-1 truncate rounded-md bg-zinc-100 px-2 py-1 font-mono text-[11px] text-foreground-muted dark:bg-zinc-800">
                       <FileText className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{sm}</span>
+                      <span className="truncate">{displayUrl(sm)}</span>
                     </span>
                   ))}
                 </div>
@@ -517,7 +527,7 @@ export default function RunsPage() {
               <ul className="space-y-1">
                 {selectedTask.pageSet.representatives.map((p) => (
                   <li key={p.url} className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="min-w-0 flex-1 truncate font-mono text-foreground-muted">{p.url}</span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-foreground-muted">{displayUrl(p.url)}</span>
                     <span className="max-w-[45%] truncate rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-foreground-subtle dark:bg-zinc-800">
                       {p.templateSignature || '—'}
                     </span>
@@ -632,7 +642,7 @@ export default function RunsPage() {
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
                       <span className="font-medium text-foreground">{pageLabel(purl, { max: 64 })}</span>
                       <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-foreground-muted dark:bg-zinc-800">{items.length} 项</span>
-                      {purl && <span className="truncate text-foreground-subtle">{purl}</span>}
+                      {purl && <span className="truncate text-foreground-subtle">{displayUrl(purl)}</span>}
                     </div>
                     <div className="grid gap-3 lg:grid-cols-2">
                       {items.map((r) => (

@@ -51,7 +51,7 @@ export default function ReportSettingsPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="text-xl font-bold tracking-tight">报告设置</h1>
-        <p className="mt-0.5 text-sm text-foreground-muted">配置报告抬头、LOGO、页脚与 PageSpeed API Key。</p>
+        <p className="mt-0.5 text-sm text-foreground-muted">配置报告抬头、LOGO 与页脚。</p>
       </div>
 
       <Card className="overflow-hidden">
@@ -96,24 +96,6 @@ export default function ReportSettingsPage() {
               )}
             </div>
             <p className="text-xs text-foreground-subtle">PNG/JPG，建议不超过 200KB；嵌入报告内。</p>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden">
-        <div className="border-b border-border/60 bg-white/40 px-5 py-3.5 dark:bg-white/[0.04]">
-          <h2 className="text-base font-semibold">PageSpeed 评分</h2>
-        </div>
-        <div className="space-y-5 px-5 py-5">
-          <div className="space-y-1.5">
-            <Label>Google PageSpeed API Key（可选）</Label>
-            <Input
-              value={settings.psiApiKey}
-              onChange={(e) => setSettings({ ...settings, psiApiKey: e.target.value })}
-              placeholder="留空则使用本地 Lighthouse（离线可用）"
-              type="password"
-            />
-            <p className="text-xs text-foreground-subtle">配置后优先调用 PSI API；无 Key 或失败时自动回退本地 Lighthouse。</p>
           </div>
         </div>
       </Card>

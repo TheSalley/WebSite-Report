@@ -5,7 +5,6 @@ import type { CheckStatus } from './types'
 import { runTask, shutdownEngine } from './engine/runner'
 import { buildPageSet, type PageSetResult } from './engine/page-set'
 import { countResults } from './engine/scoring'
-import { getBrowser } from './engine/browser'
 import { fetchPageSpeed } from './engine/pagespeed'
 import { capturePagespeedShots } from './pagespeed-shots'
 import {
@@ -20,8 +19,7 @@ import {
   updateCheckResultDeliverable,
   updateCheckResultStatus,
   listCheckResults,
-  recoverStaleRunningTasks,
-  deleteTask
+  recoverStaleRunningTasks
 } from './store'
 import type { RuleRow } from './store'
 import { logInfo, logWarn, logError } from './logger'
@@ -108,10 +106,10 @@ export async function recoverInterruptedTasks(): Promise<number> {
 export async function startTask(siteId: number, ruleSetId: number): Promise<number> {
   const site = await getSite(siteId)
   const ruleSet = await getRuleSet(ruleSetId)
-  if (!site || !ruleSet) throw new Error('站点或规则集不存在')
+  if (!site || !ruleSet) throw new Error('站点或分组不存在')
 
   const rules = (await listRulesForSet(ruleSetId)).filter((r) => r.enabled)
-  if (rules.length === 0) throw new Error('规则集没有启用的规则')
+  if (rules.length === 0) throw new Error('分组没有启用的规则')
 
   // 先持久化任务
   const task = await createTask({ siteId, ruleSetId })
@@ -352,13 +350,6 @@ export async function cancelTask(taskId: number): Promise<boolean> {
   running.signal.cancelled = true
   logWarn('已发出取消信号', taskId)
   return true
-}
-
-export async function removeTask(taskId: number): Promise<void> {
-  const running = runningTasks.get(taskId)
-  if (running) running.signal.cancelled = true
-  runningTasks.delete(taskId)
-  await deleteTask(taskId)
 }
 
 export async function updateNote(resultId: number, note: string): Promise<void> {

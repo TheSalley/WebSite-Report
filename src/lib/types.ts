@@ -160,16 +160,13 @@ export interface ReportSettings {
   logoPath: string
   reportTitle: string
   footerText: string
-  /** 可选：Google PageSpeed 接口 Key（留空用本地 Lighthouse） */
-  psiApiKey: string
 }
 
 export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
   companyName: '',
   logoPath: '/logo.svg',
   reportTitle: '网站合规性检测报告',
-  footerText: '本报告由网站合规性检测工具自动生成',
-  psiApiKey: ''
+  footerText: '本报告由网站合规性检测工具自动生成'
 }
 
 /** PageSpeed 单个类别评分（0-100） */

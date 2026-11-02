@@ -22,7 +22,6 @@ export async function saveReportSettings(settings: Partial<ReportSettings>): Pro
   rows['report.logoPath'] = merged.logoPath
   rows['report.reportTitle'] = merged.reportTitle
   rows['report.footerText'] = merged.footerText
-  rows['report.psiApiKey'] = merged.psiApiKey
   await saveSettings(rows)
   return merged
 }

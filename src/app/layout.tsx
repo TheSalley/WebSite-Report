@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "网站合规性检测",
-  description: "自动化网站合规性检测：真实浏览器渲染、内置规则集、检测与报告导出",
+  description: "自动化网站合规性检测：真实浏览器渲染、规则库与分组、检测与报告导出",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

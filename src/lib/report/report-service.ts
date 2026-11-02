@@ -5,7 +5,7 @@ import { getReportSettings } from '../settings'
 import { DELIVERABLE_PRESETS } from '../seed'
 import { getBrowser } from '../engine/browser'
 import { describeElementorItem } from '../engine/rules/delivery'
-import { pageLabel } from '../display'
+import { displayUrl, pageLabel } from '../display'
 
 import type { CheckResult, ReportSettings, Site, RuleSet, Task, SiteDataByRuleKey } from '../types'
 
@@ -370,11 +370,11 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
         <span class="badge badge-pass">${pageSet.representatives.length} 个代表页</span>
         <span class="pageset-hint">模板去重自 ${pageSet.candidateCount} 个候选 URL</span>
       </div>
-      ${pageSet.sitemaps.length > 0 ? `<div class="pageset-sitemaps">${pageSet.sitemaps.map((sm) => `<span class="pageset-sm">${escapeHtml(sm)}</span>`).join('')}</div>` : ''}
+      ${pageSet.sitemaps.length > 0 ? `<div class="pageset-sitemaps">${pageSet.sitemaps.map((sm) => `<span class="pageset-sm">${escapeHtml(displayUrl(sm))}</span>`).join('')}</div>` : ''}
       <div class="pageset-table-wrap">
         <table class="pageset-table">
           <thead><tr><th style="width:62%">页面 URL</th><th>模板签名</th></tr></thead>
-          <tbody>${pageSet.representatives.map((p) => `<tr><td class="pageset-url">${escapeHtml(p.url)}</td><td class="pageset-sig">${escapeHtml(p.templateSignature || '—')}</td></tr>`).join('')}</tbody>
+          <tbody>${pageSet.representatives.map((p) => `<tr><td class="pageset-url">${escapeHtml(displayUrl(p.url))}</td><td class="pageset-sig">${escapeHtml(p.templateSignature || '—')}</td></tr>`).join('')}</tbody>
         </table>
       </div>
     </div>`
@@ -586,7 +586,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   <table class="contract-table meta-table">
     <tr>
       <td class="label">站点名称</td><td class="value">${escapeHtml(site.name)}</td>
-      <td class="label">检测网址</td><td class="value">${escapeHtml(site.url)}</td>
+      <td class="label">检测网址</td><td class="value">${escapeHtml(displayUrl(site.url))}</td>
     </tr>
     <tr>
       <td class="label">报告编号</td><td class="value">WEB-REPORT-${String(task.id).padStart(4, '0')}</td>

@@ -1,17 +1,16 @@
 # 网站合规性检测（Next.js 版）
 
-基于 Next.js（App Router）重写的网站合规性检测应用。输入网址 → 选择规则集 → 真实浏览器深度检测 → 查看结果 → 生成/导出报告。
+基于 Next.js（App Router）重写的网站合规性检测应用。输入网址 → 选择分组 → 真实浏览器深度检测 → 查看结果 → 生成/导出报告。
 
-> 项目思路源自 Electron 桌面版 `F:\Git\WEB-REPORT`，将检测引擎（Playwright + 25 条规则 + PageSpeed 双通道）整体迁移为 Web 服务，供本地或内网部署使用。
+> 项目思路源自 Electron 桌面版 `F:\Git\WEB-REPORT`，将检测引擎（Playwright + 内置规则库 + PageSpeed 评分/截图）整体迁移为 Web 服务，供本地或内网部署使用。
 
 ## 功能
 
 - **站点管理**：CRUD、批量导入（每行一个 URL，自动取主机名为名称）
-- **规则集管理**：内置「建站服务合同验收」一套；支持新建/复制/删除、增删规则、启停、严重级别调整
+- **规则分组**：内置规则库；可新建/复制/删除分组，勾选规则、启停并配置说明与交付文案
 - **检测与历史**：后台真实浏览器执行（无头 Chromium + JS 渲染），实时进度、取消、任务历史、结果明细（实际值/期望值/说明/截图证据）、人工复核备注
-- **报告**：所见即所得 HTML 报告（封面/分组明细/截图/PageSpeed 截图），浏览器打印导出 PDF；报告设置（公司名、LOGO、标题、页脚、PSI API Key）
-- **PageSpeed 截图**：配置 Google PSI API Key 优先调用，否则回退本地 Lighthouse（离线可用），采集移动端 + 桌面端 pagespeed.web.dev 得分报告截图
-- **得分算法**：100 分制（必须 3 / 警告 2 / 建议 1；pass 全权重、warn 半权重）；任一必须项失败 → 判定「不通过」
+- **报告**：所见即所得 HTML 报告（封面/分组明细/截图/PageSpeed 截图），浏览器打印导出 PDF；报告设置（公司名、LOGO、标题、页脚）
+- **PageSpeed**：通过 Google PSI 在线接口采集移动端 + 桌面端评分；并截取 pagespeed.web.dev 的得分报告截图，网络不可用时用本地评分数据渲染兜底
 
 ## 快速开始
 
@@ -54,13 +53,11 @@ npx next start -p 3010     # 直接启动，浏览器路径由代码自动探测
   - **缺少系统依赖**：运行 `npx playwright install-deps chromium` 或将上面的 apt 依赖安装完整。
   - **内存不足**：容器/小内存机器可设置 `--disable-dev-shm-usage`（引擎已默认带该参数）。
   - **目标网站网络不通**：确认服务器能访问被检测的站点（部分站点在国内服务器上需代理）。
-  - **Lighthouse 拉不起浏览器**：PageSpeed 评分失败不会导致整个任务失败，属于可降级项。
 
 ### 环境变量
 
 - `WEBREPORT_DATA_DIR`：数据目录（默认 `web-report-data/`），多实例部署时需指向共享目录。
 - `PLAYWRIGHT_BROWSERS_PATH`：Playwright 浏览器目录（部署脚本已固定为 `/opt/ms-playwright`），非 root 用户运行时必须设置，否则报 `Executable doesn't exist`。
-- `report.psiApiKey`：可在「报告设置」页面配置 Google PSI API Key，避免使用本地 Lighthouse。
 
 ## 常用命令
 
@@ -78,7 +75,7 @@ src/
 │   ├── api/                 # REST API（sites / rulesets / tasks / settings / screenshots / report）
 │   ├── runs/                # 检测与历史
 │   ├── sites/               # 站点管理
-│   ├── rules/               # 规则集管理
+│   ├── rules/               # 规则库与分组
 │   ├── reports/[id]         # 完整报告页（可打印 PDF）
 │   ├── reports/settings     # 报告设置
 │   └── docs/                # 使用说明
@@ -88,7 +85,7 @@ src/
     │   └── rules/           # 25 条规则实现（SEO/性能/安全/内容/合规）
     ├── report/              # 报告生成（内联样式 HTML，可打印）
     ├── store.ts             # SQLite 数据层（node:sqlite，零额外依赖）
-    ├── seed.ts              # 内置规则集种子
+    ├── seed.ts              # 内置规则库与默认分组种子
     ├── task-service.ts      # 后台任务调度（内存进度 + 持久化）
     ├── settings.ts / init.ts
     └── types.ts             # 共享类型
@@ -97,7 +94,7 @@ src/
 ## 已知限制
 
 - 本地 SQLite 存储（Node 内置 node:sqlite，零额外依赖），适合单机/小团队；多用户并发可换 Postgres
-- PageSpeed 本地 Lighthouse 只支持 Node 运行环境，Serverless 部署需改用纯 PSI API
+- PageSpeed 评分依赖 Google PSI 在线接口（匿名配额有限）；截图依赖 pagespeed.web.dev，目标站拦截 Google 抓取时只能使用本地渲染兜底
 - 批量检测暂为单任务逐个执行；周期巡检、账号体系为二期方向
 
 ## 许可

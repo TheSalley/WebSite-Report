@@ -1,11 +1,12 @@
 import type { RuleHandler } from '../types'
+import { displayUrl } from '../../display'
 
 export const securityRules: Record<string, RuleHandler> = {
   'security.https': async ({ snapshot }) => {
     const ok = snapshot.finalUrl.startsWith('https://')
     return {
       status: ok ? 'pass' : 'fail',
-      actual: snapshot.finalUrl.startsWith('http://') ? 'http://' : snapshot.finalUrl,
+      actual: snapshot.finalUrl.startsWith('http://') ? 'http://' : displayUrl(snapshot.finalUrl),
       expected: 'https://',
       description: ok ? 'HTTPS 已启用' : snapshot.finalUrl.startsWith('http://') ? '页面为 http 访问，未启用 HTTPS' : '无法确认 HTTPS'
     }

@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, Globe, Upload, ExternalLink } from 'lucide-react'
 import { Button, Card, Dialog, Input, Textarea, Label, Empty } from '@/components/ui'
 import type { Site } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
+import { displayUrl } from '@/lib/display'
 
 export default function SitesPage() {
   const [sites, setSites] = React.useState<Site[]>([])
@@ -178,7 +179,7 @@ export default function SitesPage() {
                     <td className="px-4 py-3.5 font-medium">{s.name}</td>
                     <td className="px-4 py-3.5">
                       <a href={s.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
-                        <span className="max-w-[220px] truncate">{s.url}</span>
+                        <span className="max-w-[220px] truncate">{displayUrl(s.url)}</span>
                         <ExternalLink className="h-3 w-3 shrink-0" />
                       </a>
                     </td>

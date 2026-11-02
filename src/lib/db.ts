@@ -98,6 +98,8 @@ export function getDb(): DatabaseSync {
     `)
     ensureCompatColumns(db)
     migrateFromJson(db)
+    // PSI API Key 配置已下线：清理历史遗留密钥
+    db.prepare("DELETE FROM settings WHERE key = 'report.psiApiKey'").run()
   }
   return db
 }

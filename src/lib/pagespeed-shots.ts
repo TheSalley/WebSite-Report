@@ -204,9 +204,8 @@ async function generateLocalScoreShot(
   strategy: 'mobile' | 'desktop',
   data: PageSpeedStrategyResult
 ): Promise<void> {
-  const catColors = ['#2563eb', '#059669', '#d97706', '#dc2626']
   const catHtml = (data.categories ?? [])
-    .map((c, i) => {
+    .map((c) => {
       const score = c.score ?? 0
       const color = score >= 90 ? '#059669' : score >= 50 ? '#d97706' : '#dc2626'
       return `<div class="cat">

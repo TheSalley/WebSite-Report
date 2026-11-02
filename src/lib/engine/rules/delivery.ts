@@ -1,6 +1,6 @@
 import type { RuleHandler } from '../types'
 import { discoverSitemapUrls, collectSitemapLocsGrouped } from '../page-set'
-import { pagePathShort } from '../../display'
+import { displayUrl, pagePathShort } from '../../display'
 import type { ElementorHiddenItem } from '../../types'
 
 /** 单条 Elementor 隐藏板块的展示文本（规则描述与报告明细表共用） */
@@ -86,14 +86,14 @@ export const deliveryRules: Record<string, RuleHandler> = {
           status: 'fail',
           actual: `${pageSet.sitemaps.length} 个 sitemap，0 个 URL`,
           expected: 'sitemap 至少包含 1 个有效 URL',
-          description: `已发现 ${pageSet.sitemaps.length} 个 sitemap 但均未提取到有效 URL：${pageSet.sitemaps.join('、')}`
+          description: `已发现 ${pageSet.sitemaps.length} 个 sitemap 但均未提取到有效 URL：${pageSet.sitemaps.map(displayUrl).join('、')}`
         }
       }
       return {
         status: 'pass',
         actual: `${pageSet.sitemaps.length} 个 sitemap，共 ${pageSet.locTotal} 个 URL`,
         expected: 'robots.txt 声明 Sitemap，可访问且非空',
-        description: `robots.txt 已声明 Sitemap：${pageSet.sitemaps.join('、')}，共 ${pageSet.locTotal} 个 URL`
+        description: `robots.txt 已声明 Sitemap：${pageSet.sitemaps.map(displayUrl).join('、')}，共 ${pageSet.locTotal} 个 URL`
       }
     }
     // 回退：无枚举数据（如单页任务）时独立抓取校验
@@ -115,14 +115,14 @@ export const deliveryRules: Record<string, RuleHandler> = {
           status: 'fail',
           actual: `${sitemaps.length} 个 sitemap，0 个 URL`,
           expected: 'sitemap 至少包含 1 个有效 URL',
-          description: `已发现 ${sitemaps.length} 个 sitemap 但均未提取到 URL：${sitemaps.join('、')}`
+          description: `已发现 ${sitemaps.length} 个 sitemap 但均未提取到 URL：${sitemaps.map(displayUrl).join('、')}`
         }
       }
       return {
         status: 'pass',
         actual: `${sitemaps.length} 个 sitemap，共 ${locTotal} 个 URL`,
         expected: 'robots.txt 声明 Sitemap，可访问且非空',
-        description: `robots.txt 已声明 Sitemap：${sitemaps.join('、')}，共 ${locTotal} 个 URL`
+        description: `robots.txt 已声明 Sitemap：${sitemaps.map(displayUrl).join('、')}，共 ${locTotal} 个 URL`
       }
     } catch (e) {
       return {
