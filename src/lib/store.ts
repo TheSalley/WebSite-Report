@@ -393,16 +393,16 @@ export async function deleteTask(id: number): Promise<void> {
   sqlite.exec('BEGIN')
   try {
     sqlite.prepare('DELETE FROM check_results WHERE taskId = ?').run(id)
+    sqlite.prepare('DELETE FROM logs WHERE taskId = ?').run(id)
     sqlite.prepare('DELETE FROM tasks WHERE id = ?').run(id)
     sqlite.exec('COMMIT')
   } catch (err) {
     sqlite.exec('ROLLBACK')
     throw err
   }
-  // 数据行删除成功后再清理任务独占文件；清理失败不影响删除结果
+  // 数据行删除成功后再清理任务截图；清理失败不影响删除结果
   await Promise.allSettled([
-    rm(join(DATA_DIR, 'screenshots', `task-${id}`), { recursive: true, force: true }),
-    rm(join(DATA_DIR, 'logs', `task-${id}.log`), { force: true })
+    rm(join(DATA_DIR, 'screenshots', `task-${id}`), { recursive: true, force: true })
   ])
 }
 

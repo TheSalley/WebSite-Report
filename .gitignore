@@ -41,3 +41,4 @@ yarn-error.log*
 next-env.d.ts
 
 # runtime data (sqlite db / logs / screenshots / legacy json)
+/web-report-data/

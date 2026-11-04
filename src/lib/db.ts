@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, existsSync } from 'fs'
+import { mkdirSync, readFileSync, existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { DatabaseSync } from 'node:sqlite'
 import { DELIVERABLE_PRESETS } from './seed'
@@ -95,13 +95,66 @@ export function getDb(): DatabaseSync {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS logs (
+        id INTEGER PRIMARY KEY,
+        taskId INTEGER,
+        level TEXT NOT NULL,
+        message TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_logs_task ON logs(taskId, id);
     `)
     ensureCompatColumns(db)
     migrateFromJson(db)
+    migrateLogsFromFiles(db)
     // PSI API Key 配置已下线：清理历史遗留密钥
     db.prepare("DELETE FROM settings WHERE key = 'report.psiApiKey'").run()
   }
   return db
+}
+
+// ── 首次启动：把旧版 logs/*.log 文件导入数据库（幂等；原文件保留为备份）──
+
+function migrateLogsFromFiles(sqlite: DatabaseSync): void {
+  if (tableCount(sqlite, 'logs') > 0) return
+  const dir = join(DATA_DIR, 'logs')
+  if (!existsSync(dir)) return
+
+  const files = readdirSync(dir).filter((name) => name.endsWith('.log'))
+  if (files.length === 0) return
+
+  const insert = sqlite.prepare('INSERT INTO logs (taskId, level, message, createdAt) VALUES (?, ?, ?, ?)')
+  const linePattern = /^(\S+) \[([A-Z]+)\](?: \[task:(\d+)\])? (.*)$/
+  // app.log 与 task-{id}.log 内容重叠，按「任务 + 时间 + 级别 + 内容」去重
+  const seen = new Set<string>()
+  sqlite.exec('BEGIN')
+  try {
+    for (const file of files) {
+      const taskMatch = /^task-(\d+)\.log$/.exec(file)
+      const fileTaskId = taskMatch ? Number(taskMatch[1]) : null
+      for (const line of readFileSync(join(dir, file), 'utf8').split(/\r?\n/)) {
+        if (!line.trim()) continue
+        const match = linePattern.exec(line)
+        if (!match) {
+          const key = `${fileTaskId ?? ''}\u0000${line}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          insert.run(fileTaskId, 'info', line, now())
+          continue
+        }
+        const [, ts, level, taskIdText, message] = match
+        const taskId = taskIdText ? Number(taskIdText) : fileTaskId
+        const key = `${taskId ?? ''}\u0000${ts}\u0000${level}\u0000${message}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        insert.run(taskId, level.toLowerCase(), message, ts)
+      }
+    }
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    console.warn('[store] 迁移日志文件失败：', err)
+  }
 }
 
 export function now(): string {

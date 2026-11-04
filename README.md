@@ -19,7 +19,7 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-检测引擎依赖 Playwright Chromium，需先安装浏览器（首次可执行 `npx playwright install chromium`）。数据默认存储于项目根 `web-report-data/`（SQLite 数据库 `realsite.db`），可用环境变量 `WEBREPORT_DATA_DIR` 覆盖。
+检测引擎依赖 Playwright Chromium，需先安装浏览器（首次可执行 `npx playwright install chromium`）。数据默认存储于项目根 `web-report-data/`（SQLite 数据库 `realsite.db`，日志保存在数据库 `logs` 表），可用环境变量 `WEBREPORT_DATA_DIR` 覆盖。
 
 ## 服务器部署（Linux）
 

@@ -1,7 +1,18 @@
 'use client'
 
 import * as React from 'react'
-import { Copy, ListChecks, Plus, Save, Search, Settings2, Trash2 } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  ListChecks,
+  Pencil,
+  Plus,
+  Save,
+  Search,
+  Settings2,
+  Trash2
+} from 'lucide-react'
 import { Button, Card, Dialog, Empty, Input, Label, Switch, Textarea } from '@/components/ui'
 import type { Rule, RuleSet } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
@@ -23,6 +34,8 @@ type GroupForm = {
   description: string
   scanPages: boolean
 }
+
+type RuleFilter = 'all' | 'selected' | 'unselected'
 
 const EMPTY_FORM: GroupForm = { name: '', description: '', scanPages: false }
 
@@ -67,6 +80,10 @@ export default function RulesPage() {
   const [createOpen, setCreateOpen] = React.useState(false)
   const [newName, setNewName] = React.useState('')
   const [newDesc, setNewDesc] = React.useState('')
+  const [filter, setFilter] = React.useState<RuleFilter>('all')
+  const [infoOpen, setInfoOpen] = React.useState(false)
+  /** 分组折叠状态：未记录的项按「是否已选规则」决定默认展开 */
+  const [expanded, setExpanded] = React.useState<Record<string, boolean>>({})
 
   const selectedSet = ruleSets.find((rs) => rs.id === selectedId) ?? null
   const configRule = configKey ? rules.find((r) => r.ruleKey === configKey) ?? null : null
@@ -101,11 +118,15 @@ export default function RulesPage() {
 
   const selectSet = async (rs: RuleSet) => {
     if (rs.id === selectedId) return
+    if (saving) return
     if (dirty && !confirm('当前分组有未保存的修改，切换会丢失。继续？')) return
     try {
       setSelectedId(rs.id)
       setForm(formOf(rs))
       setConfigKey(null)
+      setFilter('all')
+      setExpanded({})
+      setInfoOpen(false)
       setRules(await fetchJson<DraftRule[]>(`/api/rulesets/${rs.id}/rules`))
       setDirty(false)
       setError('')
@@ -131,6 +152,9 @@ export default function RulesPage() {
       setRules([])
       setDirty(false)
       setConfigKey(null)
+      setFilter('all')
+      setExpanded({})
+      setInfoOpen(false)
       setError('')
     } catch (e) {
       setError(friendlyError(e))
@@ -138,6 +162,7 @@ export default function RulesPage() {
   }
 
   const duplicateSet = async (rs: RuleSet) => {
+    if (saving) return
     if (dirty && !confirm('当前分组有未保存的修改，复制并切换会丢失。继续？')) return
     try {
       const dup = await request<RuleSet>(`/api/rulesets/${rs.id}`, {
@@ -151,6 +176,9 @@ export default function RulesPage() {
       setRules(await fetchJson<DraftRule[]>(`/api/rulesets/${dup.id}/rules`))
       setDirty(false)
       setConfigKey(null)
+      setFilter('all')
+      setExpanded({})
+      setInfoOpen(false)
       setError('')
     } catch (e) {
       setError(friendlyError(e))
@@ -158,6 +186,7 @@ export default function RulesPage() {
   }
 
   const deleteSet = async (rs: RuleSet) => {
+    if (saving) return
     if (!confirm(`确认删除分组「${rs.name}」？分组内的规则选择会一并删除，历史检测记录不受影响。`)) return
     try {
       await request(`/api/rulesets/${rs.id}`, { method: 'DELETE' })
@@ -175,6 +204,9 @@ export default function RulesPage() {
         }
         setDirty(false)
         setConfigKey(null)
+        setFilter('all')
+        setExpanded({})
+        setInfoOpen(false)
       }
       setError('')
     } catch (e) {
@@ -214,7 +246,7 @@ export default function RulesPage() {
     setDirty(true)
   }
 
-  const save = async () => {
+  const save = React.useCallback(async () => {
     if (selectedId === null || !form.name.trim()) return
     setSaving(true)
     try {
@@ -236,21 +268,71 @@ export default function RulesPage() {
     } finally {
       setSaving(false)
     }
-  }
+  }, [selectedId, form, rules])
+
+  const selectedKeys = React.useMemo(() => new Set(rules.map((r) => r.ruleKey)), [rules])
+
+  /** 分组名 -> 全量规则（用于显示分组完整计数） */
+  const fullGroups = React.useMemo(() => {
+    const map = new Map<string, CatalogRule[]>()
+    for (const item of catalog) {
+      const arr = map.get(item.groupName) ?? []
+      arr.push(item)
+      map.set(item.groupName, arr)
+    }
+    return map
+  }, [catalog])
 
   const visibleGroups = React.useMemo(() => {
     const q = query.trim().toLowerCase()
     const map = new Map<string, CatalogRule[]>()
     for (const item of catalog) {
       if (q && !`${item.name} ${item.ruleKey} ${item.groupName}`.toLowerCase().includes(q)) continue
+      const selected = selectedKeys.has(item.ruleKey)
+      if (filter === 'selected' && !selected) continue
+      if (filter === 'unselected' && selected) continue
       const arr = map.get(item.groupName) ?? []
       arr.push(item)
       map.set(item.groupName, arr)
     }
     return Array.from(map.entries())
-  }, [catalog, query])
+  }, [catalog, query, filter, selectedKeys])
 
-  const selectedKeys = React.useMemo(() => new Set(rules.map((r) => r.ruleKey)), [rules])
+  /** ruleKey -> 草稿，避免逐行 rules.find 的 O(n²) 查找 */
+  const ruleByKey = React.useMemo(() => new Map(rules.map((r) => [r.ruleKey, r])), [rules])
+
+  /** 有筛选或搜索时强制展开，避免结果藏在折叠分组里 */
+  const forceExpand = query.trim() !== '' || filter !== 'all'
+
+  const isGroupOpen = (groupName: string, items: CatalogRule[]): boolean => {
+    if (forceExpand) return true
+    const saved = expanded[groupName]
+    if (saved !== undefined) return saved
+    return items.some((item) => selectedKeys.has(item.ruleKey))
+  }
+
+  const toggleGroup = (groupName: string, items: CatalogRule[]) => {
+    setExpanded((prev) => ({ ...prev, [groupName]: !isGroupOpen(groupName, items) }))
+  }
+
+  const selectedSiteCount = React.useMemo(
+    () => rules.filter((r) => r.scope === 'site').length,
+    [rules]
+  )
+
+  const canSave = dirty && !saving && form.name.trim() !== ''
+
+  React.useEffect(() => {
+    if (!dirty) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        void save()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [dirty, save])
 
   return (
     <div className="space-y-6">
@@ -309,148 +391,203 @@ export default function RulesPage() {
 
           {selectedSet && (
             <Card className="overflow-hidden">
-              <div className="space-y-3 border-b border-border/60 bg-white/40 px-5 py-4 dark:bg-white/[0.04]">
-                <div className="flex flex-wrap items-start gap-3">
-                  <div className="min-w-0 flex-1 space-y-3">
-                    <div className="space-y-1.5">
-                      <Label>分组名称</Label>
-                      <Input
-                        value={form.name}
-                        onChange={(e) => {
-                          setForm((f) => ({ ...f, name: e.target.value }))
-                          setDirty(true)
-                        }}
-                        placeholder="例如：上线前全面检查"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>说明</Label>
-                      <Textarea
-                        rows={2}
-                        value={form.description}
-                        onChange={(e) => {
-                          setForm((f) => ({ ...f, description: e.target.value }))
-                          setDirty(true)
-                        }}
-                        placeholder="这个分组用于什么场景（可选）"
-                      />
+              <div className="border-b border-border/60 bg-white/40 px-4 py-3 dark:bg-white/[0.04] sm:px-5">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{form.name || '未命名分组'}</div>
+                    <div className="mt-0.5 truncate text-xs text-foreground-subtle">
+                      已选 {rules.length} 条（页面级 {rules.length - selectedSiteCount} · 站点级 {selectedSiteCount}）· 规则库共 {catalog.length} 条
+                      {form.scanPages && ' · 多页面模板检查'}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-2 pt-6">
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setInfoOpen((v) => !v)}>
+                      <Pencil className="h-3.5 w-3.5" /> {infoOpen ? '收起设置' : '编辑分组'}
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => duplicateSet(selectedSet)}>
                       <Copy className="h-3.5 w-3.5" /> 复制
                     </Button>
-                    <Button size="sm" onClick={save} disabled={!dirty || saving || !form.name.trim()}>
-                      <Save className="h-3.5 w-3.5" /> {saving ? '保存中…' : dirty ? '保存' : '已保存'}
-                    </Button>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-foreground-subtle">
-                  <span>已勾选 <b className="text-foreground">{rules.length}</b> 条 · 规则库共 {catalog.length} 条</span>
-                  <label className="flex items-center gap-2 text-foreground-muted">
-                    <Switch
-                      checked={form.scanPages}
-                      onCheckedChange={(v) => {
-                        setForm((f) => ({ ...f, scanPages: v }))
-                        setDirty(true)
-                      }}
-                    />
-                    多页面模板检查
-                  </label>
-                  <span>按 sitemap 枚举并去重，模板页只检测代表页</span>
-                </div>
+
+                {infoOpen && (
+                  <div className="mt-3 space-y-3 border-t border-border/60 pt-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>分组名称</Label>
+                        <Input
+                          value={form.name}
+                          onChange={(e) => {
+                            setForm((f) => ({ ...f, name: e.target.value }))
+                            setDirty(true)
+                          }}
+                          placeholder="例如：上线前全面检查"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>说明</Label>
+                        <Textarea
+                          rows={2}
+                          value={form.description}
+                          onChange={(e) => {
+                            setForm((f) => ({ ...f, description: e.target.value }))
+                            setDirty(true)
+                          }}
+                          placeholder="这个分组用于什么场景（可选）"
+                        />
+                      </div>
+                      <div className="hidden sm:block" />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-foreground-subtle">
+                      <label className="flex items-center gap-2 text-foreground-muted">
+                        <Switch
+                          checked={form.scanPages}
+                          onCheckedChange={(v) => {
+                            setForm((f) => ({ ...f, scanPages: v }))
+                            setDirty(true)
+                          }}
+                        />
+                        多页面模板检查
+                      </label>
+                      <span>按 sitemap 枚举并去重，模板页只检测代表页</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="p-5">
-                <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-semibold">规则库</h2>
-                    <p className="mt-0.5 text-xs text-foreground-subtle">勾选需要执行的规则；点右侧齿轮可单独调整说明、交付文案与默认通过。</p>
+              <div className="p-4 sm:p-5">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-border/70 p-0.5">
+                    {([
+                      ['all', '全部', catalog.length],
+                      ['selected', '已选', rules.length],
+                      ['unselected', '未选', catalog.length - rules.length]
+                    ] as const).map(([key, label, count]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setFilter(key)}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          filter === key
+                            ? 'bg-primary-soft text-primary-soft-foreground'
+                            : 'text-foreground-muted hover:bg-white/60 dark:hover:bg-white/10'
+                        }`}
+                      >
+                        {label} <span className="tabular-nums opacity-70">{count}</span>
+                      </button>
+                    ))}
                   </div>
-                  <div className="relative w-full sm:w-64">
+                  <div className="relative min-w-0 flex-1 sm:max-w-64">
                     <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-subtle" />
                     <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索规则名称或 key" className="pl-8" />
                   </div>
                 </div>
 
                 {visibleGroups.length === 0 ? (
-                  <Empty icon={<Search className="h-8 w-8" />} title="没有匹配的规则" description="换个关键词试试。" />
+                  <Empty icon={<Search className="h-8 w-8" />} title="没有匹配的规则" description="换个关键词或筛选条件试试。" />
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {visibleGroups.map(([groupName, items]) => {
-                      const selectedCount = items.filter((i) => selectedKeys.has(i.ruleKey)).length
-                      const allSelected = selectedCount === items.length
+                      const fullItems = fullGroups.get(groupName) ?? items
+                      const selectedCount = fullItems.filter((i) => selectedKeys.has(i.ruleKey)).length
+                      const allSelected = items.every((i) => selectedKeys.has(i.ruleKey))
+                      const open = isGroupOpen(groupName, items)
                       return (
                         <div key={groupName} className="overflow-hidden rounded-xl border border-border/60">
-                          <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-white/45 px-3.5 py-2 dark:bg-white/[0.05]">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{groupName}</span>
-                              <span className="text-xs text-foreground-subtle">{selectedCount}/{items.length}</span>
-                            </div>
+                          <div className="flex items-center gap-2 bg-white/45 px-3 py-2 dark:bg-white/[0.05]">
                             <button
                               type="button"
-                              className="text-xs font-medium text-primary hover:underline"
+                              onClick={() => toggleGroup(groupName, items)}
+                              className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                              aria-expanded={open}
+                            >
+                              {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                              <span className="truncate text-sm font-medium">{groupName}</span>
+                              <span className={`shrink-0 text-xs tabular-nums ${selectedCount > 0 ? 'text-primary' : 'text-foreground-subtle'}`}>
+                                {selectedCount}/{fullItems.length}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="shrink-0 text-xs font-medium text-primary hover:underline"
                               onClick={() => toggleCategory(items, !allSelected)}
                             >
                               {allSelected ? '清空该组' : '全选该组'}
                             </button>
                           </div>
-                          <div className="divide-y divide-border/70">
+                          {open && (
+                          <div className="divide-y divide-border/70 border-t border-border/60">
                             {items.map((item) => {
                               const selected = selectedKeys.has(item.ruleKey)
-                              const current = rules.find((r) => r.ruleKey === item.ruleKey)
+                              const current = ruleByKey.get(item.ruleKey)
                               return (
-                                <label
+                                <div
                                   key={item.ruleKey}
-                                  className={`flex cursor-pointer items-start gap-3 px-3.5 py-3 transition-colors ${selected ? 'bg-primary-soft/25' : 'hover:bg-white/50 dark:hover:bg-white/[0.04]'}`}
+                                  className={`flex items-start gap-2.5 px-3 py-2 transition-colors ${selected ? 'bg-primary-soft/25' : 'hover:bg-white/50 dark:hover:bg-white/[0.04]'}`}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={selected}
-                                    onChange={(e) => toggleRule(item, e.target.checked)}
-                                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-primary"
-                                  />
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="text-sm font-medium">{item.name}</span>
-                                      {item.scope === 'site' && (
-                                        <span className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-medium text-primary-soft-foreground">站点级</span>
-                                      )}
-                                      {current?.params?.defaultPass === true && (
-                                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">默认通过</span>
-                                      )}
-                                      {current && !current.enabled && (
-                                        <span className="rounded bg-zinc-500/10 px-1.5 py-0.5 text-[10px] font-medium text-foreground-subtle">已停用</span>
-                                      )}
+                                  <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={selected}
+                                      onChange={(e) => toggleRule(item, e.target.checked)}
+                                      className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-primary"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <span className="text-sm font-medium">{item.name}</span>
+                                        {item.scope === 'site' && (
+                                          <span className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-medium text-primary-soft-foreground">站点级</span>
+                                        )}
+                                        {current?.params?.defaultPass === true && (
+                                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">默认通过</span>
+                                        )}
+                                        {current && !current.enabled && (
+                                          <span className="rounded bg-zinc-500/10 px-1.5 py-0.5 text-[10px] font-medium text-foreground-subtle">已停用</span>
+                                        )}
+                                      </div>
+                                      <div className="mt-0.5 truncate text-[11px] text-foreground-subtle">
+                                        <span className="font-mono">{item.ruleKey}</span>
+                                        {item.description && (
+                                          <span className={`${selected ? '' : 'hidden sm:inline'} text-foreground-muted`}> · {item.description}</span>
+                                        )}
+                                      </div>
                                     </div>
-                                    <div className="mt-0.5 font-mono text-[11px] text-foreground-subtle">{item.ruleKey}</div>
-                                    {item.description && (
-                                      <p className="mt-1 line-clamp-1 text-xs text-foreground-muted">{item.description}</p>
-                                    )}
-                                  </div>
+                                  </label>
                                   {selected && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       title="规则设置"
-                                      onClick={(e) => {
-                                        e.preventDefault()
-                                        e.stopPropagation()
-                                        setConfigKey(item.ruleKey)
-                                      }}
+                                      className="shrink-0"
+                                      onClick={() => setConfigKey(item.ruleKey)}
                                     >
                                       <Settings2 className="h-3.5 w-3.5" />
                                     </Button>
                                   )}
-                                </label>
+                                </div>
                               )
                             })}
                           </div>
+                          )}
                         </div>
                       )
                     })}
                   </div>
                 )}
+              </div>
+
+              <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-white/85 px-4 py-2.5 backdrop-blur dark:bg-zinc-950/85 sm:px-5">
+                <div className="text-xs text-foreground-subtle">
+                  {dirty ? (
+                    <span className="text-amber-700 dark:text-amber-400">有未保存的修改</span>
+                  ) : (
+                    <span>所有修改已保存</span>
+                  )}
+                  <span className="ml-2 hidden sm:inline">Ctrl/⌘ + S 保存</span>
+                </div>
+                <Button size="sm" onClick={save} disabled={!canSave}>
+                  <Save className="h-3.5 w-3.5" /> {saving ? '保存中…' : '保存'}
+                </Button>
               </div>
             </Card>
           )}
