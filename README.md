@@ -77,8 +77,7 @@ src/
 │   ├── sites/               # 站点管理
 │   ├── rules/               # 规则库与分组
 │   ├── reports/[id]         # 完整报告页（可打印 PDF）
-│   ├── reports/settings     # 报告设置
-│   └── docs/                # 使用说明
+│   └── reports/settings     # 报告设置
 ├── components/              # UI 组件（shadcn 风格）与页面外壳
 └── lib/
     ├── engine/              # 检测引擎：browser / network-collector / snapshot / scoring / pagespeed

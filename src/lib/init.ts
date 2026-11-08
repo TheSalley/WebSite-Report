@@ -15,7 +15,6 @@ const SEED_KEY = 'seed.defaultRuleGroups'
  * - 首次运行时创建默认规则分组；用户删除或修改后不会再次自动创建
  */
 export async function initData(): Promise<void> {
-  await mkdir(join(DATA_DIR, 'json'), { recursive: true })
   await mkdir(join(DATA_DIR, 'screenshots'), { recursive: true })
 
   await recoverInterruptedTasks()

@@ -2,15 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Globe, ListChecks, FileText, Settings, Activity } from 'lucide-react'
+import { Globe, ListChecks, Settings, Activity } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 
 const navItems = [
   { href: '/runs', label: '检测与历史', icon: Activity },
   { href: '/sites', label: '站点管理', icon: Globe },
   { href: '/rules', label: '规则分组', icon: ListChecks },
-  { href: '/reports/settings', label: '报告设置', icon: Settings },
-  { href: '/docs', label: '使用说明', icon: FileText }
+  { href: '/reports/settings', label: '报告设置', icon: Settings }
 ]
 
 export default function Shell({ children }: { children: React.ReactNode }) {
