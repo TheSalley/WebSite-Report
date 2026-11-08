@@ -14,6 +14,7 @@ import {
   Trash2
 } from 'lucide-react'
 import { Button, Card, Dialog, Empty, Input, Label, Switch, Textarea } from '@/components/ui'
+import { useConfirm } from '@/components/confirm'
 import type { Rule, RuleSet } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
 
@@ -34,8 +35,6 @@ type GroupForm = {
   description: string
   scanPages: boolean
 }
-
-type RuleFilter = 'all' | 'selected' | 'unselected'
 
 const EMPTY_FORM: GroupForm = { name: '', description: '', scanPages: false }
 
@@ -66,6 +65,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export default function RulesPage() {
+  const confirm = useConfirm()
   const [ruleSets, setRuleSets] = React.useState<RuleSet[]>([])
   const [catalog, setCatalog] = React.useState<CatalogRule[]>([])
   const [selectedId, setSelectedId] = React.useState<number | null>(null)
@@ -80,7 +80,8 @@ export default function RulesPage() {
   const [createOpen, setCreateOpen] = React.useState(false)
   const [newName, setNewName] = React.useState('')
   const [newDesc, setNewDesc] = React.useState('')
-  const [filter, setFilter] = React.useState<RuleFilter>('all')
+  const [pickerOpen, setPickerOpen] = React.useState(false)
+  const [pickerQuery, setPickerQuery] = React.useState('')
   const [infoOpen, setInfoOpen] = React.useState(false)
   /** 分组折叠状态：未记录的项按「是否已选规则」决定默认展开 */
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({})
@@ -119,12 +120,20 @@ export default function RulesPage() {
   const selectSet = async (rs: RuleSet) => {
     if (rs.id === selectedId) return
     if (saving) return
-    if (dirty && !confirm('当前分组有未保存的修改，切换会丢失。继续？')) return
+    if (dirty) {
+      const ok = await confirm({
+        title: '放弃未保存的修改？',
+        description: '当前分组有未保存的修改，切换分组会丢失这些修改。',
+        confirmText: '继续切换',
+        cancelText: '留在当前分组',
+        danger: false
+      })
+      if (!ok) return
+    }
     try {
       setSelectedId(rs.id)
       setForm(formOf(rs))
       setConfigKey(null)
-      setFilter('all')
       setExpanded({})
       setInfoOpen(false)
       setRules(await fetchJson<DraftRule[]>(`/api/rulesets/${rs.id}/rules`))
@@ -152,7 +161,6 @@ export default function RulesPage() {
       setRules([])
       setDirty(false)
       setConfigKey(null)
-      setFilter('all')
       setExpanded({})
       setInfoOpen(false)
       setError('')
@@ -163,7 +171,16 @@ export default function RulesPage() {
 
   const duplicateSet = async (rs: RuleSet) => {
     if (saving) return
-    if (dirty && !confirm('当前分组有未保存的修改，复制并切换会丢失。继续？')) return
+    if (dirty) {
+      const ok = await confirm({
+        title: '放弃未保存的修改？',
+        description: '当前分组有未保存的修改，复制并切换分组会丢失这些修改。',
+        confirmText: '复制并切换',
+        cancelText: '取消',
+        danger: false
+      })
+      if (!ok) return
+    }
     try {
       const dup = await request<RuleSet>(`/api/rulesets/${rs.id}`, {
         method: 'PUT',
@@ -176,7 +193,6 @@ export default function RulesPage() {
       setRules(await fetchJson<DraftRule[]>(`/api/rulesets/${dup.id}/rules`))
       setDirty(false)
       setConfigKey(null)
-      setFilter('all')
       setExpanded({})
       setInfoOpen(false)
       setError('')
@@ -187,7 +203,12 @@ export default function RulesPage() {
 
   const deleteSet = async (rs: RuleSet) => {
     if (saving) return
-    if (!confirm(`确认删除分组「${rs.name}」？分组内的规则选择会一并删除，历史检测记录不受影响。`)) return
+    const ok = await confirm({
+      title: '删除分组',
+      description: `确认删除分组「${rs.name}」？分组内的规则选择会一并删除，历史检测记录不受影响。此操作不可撤销。`,
+      confirmText: '删除'
+    })
+    if (!ok) return
     try {
       await request(`/api/rulesets/${rs.id}`, { method: 'DELETE' })
       const list = await refreshSets()
@@ -204,7 +225,6 @@ export default function RulesPage() {
         }
         setDirty(false)
         setConfigKey(null)
-        setFilter('all')
         setExpanded({})
         setInfoOpen(false)
       }
@@ -283,26 +303,33 @@ export default function RulesPage() {
     return map
   }, [catalog])
 
-  const visibleGroups = React.useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const map = new Map<string, CatalogRule[]>()
-    for (const item of catalog) {
-      if (q && !`${item.name} ${item.ruleKey} ${item.groupName}`.toLowerCase().includes(q)) continue
-      const selected = selectedKeys.has(item.ruleKey)
-      if (filter === 'selected' && !selected) continue
-      if (filter === 'unselected' && selected) continue
-      const arr = map.get(item.groupName) ?? []
-      arr.push(item)
-      map.set(item.groupName, arr)
-    }
-    return Array.from(map.entries())
-  }, [catalog, query, filter, selectedKeys])
+  /** 按分组归类并按关键词过滤；onlySelected 为 true 时只保留已勾选规则 */
+  const groupCatalog = React.useCallback(
+    (keyword: string, onlySelected: boolean) => {
+      const q = keyword.trim().toLowerCase()
+      const map = new Map<string, CatalogRule[]>()
+      for (const item of catalog) {
+        if (onlySelected && !selectedKeys.has(item.ruleKey)) continue
+        if (q && !`${item.name} ${item.ruleKey} ${item.groupName}`.toLowerCase().includes(q)) continue
+        const arr = map.get(item.groupName) ?? []
+        arr.push(item)
+        map.set(item.groupName, arr)
+      }
+      return Array.from(map.entries())
+    },
+    [catalog, selectedKeys]
+  )
+
+  /** 面板中只展示已勾选的规则 */
+  const selectedGroups = React.useMemo(() => groupCatalog(query, true), [groupCatalog, query])
+  /** 「添加规则」弹窗展示完整规则库 */
+  const pickerGroups = React.useMemo(() => groupCatalog(pickerQuery, false), [groupCatalog, pickerQuery])
 
   /** ruleKey -> 草稿，避免逐行 rules.find 的 O(n²) 查找 */
   const ruleByKey = React.useMemo(() => new Map(rules.map((r) => [r.ruleKey, r])), [rules])
 
   /** 有筛选或搜索时强制展开，避免结果藏在折叠分组里 */
-  const forceExpand = query.trim() !== '' || filter !== 'all'
+  const forceExpand = query.trim() !== ''
 
   const isGroupOpen = (groupName: string, items: CatalogRule[]): boolean => {
     if (forceExpand) return true
@@ -313,6 +340,11 @@ export default function RulesPage() {
 
   const toggleGroup = (groupName: string, items: CatalogRule[]) => {
     setExpanded((prev) => ({ ...prev, [groupName]: !isGroupOpen(groupName, items) }))
+  }
+
+  const openPicker = () => {
+    setPickerQuery('')
+    setPickerOpen(true)
   }
 
   const selectedSiteCount = React.useMemo(
@@ -351,7 +383,7 @@ export default function RulesPage() {
       {loading ? (
         <div className="flex justify-center py-16"><span className="text-sm text-foreground-subtle">加载中…</span></div>
       ) : ruleSets.length === 0 ? (
-        <Empty icon={<ListChecks className="h-8 w-8" />} title="还没有规则分组" description="点击「新建分组」，然后从规则库中勾选需要的规则。" />
+        <Empty icon={<ListChecks className="h-8 w-8" />} title="还没有规则分组" description="点击「新建分组」，然后通过「添加规则」勾选需要的规则。" />
       ) : (
         <div className="grid gap-4 md:grid-cols-[260px_1fr]">
           <Card className="h-fit overflow-hidden">
@@ -407,6 +439,9 @@ export default function RulesPage() {
                     <Button variant="outline" size="sm" onClick={() => duplicateSet(selectedSet)}>
                       <Copy className="h-3.5 w-3.5" /> 复制
                     </Button>
+                    <Button size="sm" onClick={openPicker}>
+                      <Plus className="h-3.5 w-3.5" /> 添加规则
+                    </Button>
                   </div>
                 </div>
 
@@ -457,40 +492,29 @@ export default function RulesPage() {
 
               <div className="p-4 sm:p-5">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <div className="inline-flex rounded-lg border border-border/70 p-0.5">
-                    {([
-                      ['all', '全部', catalog.length],
-                      ['selected', '已选', rules.length],
-                      ['unselected', '未选', catalog.length - rules.length]
-                    ] as const).map(([key, label, count]) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setFilter(key)}
-                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                          filter === key
-                            ? 'bg-primary-soft text-primary-soft-foreground'
-                            : 'text-foreground-muted hover:bg-white/60 dark:hover:bg-white/10'
-                        }`}
-                      >
-                        {label} <span className="tabular-nums opacity-70">{count}</span>
-                      </button>
-                    ))}
-                  </div>
                   <div className="relative min-w-0 flex-1 sm:max-w-64">
                     <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-subtle" />
-                    <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索规则名称或 key" className="pl-8" />
+                    <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索已选规则" className="pl-8" />
                   </div>
+                  <span className="text-xs text-foreground-subtle">仅显示已勾选的规则</span>
                 </div>
 
-                {visibleGroups.length === 0 ? (
-                  <Empty icon={<Search className="h-8 w-8" />} title="没有匹配的规则" description="换个关键词或筛选条件试试。" />
+                {rules.length === 0 ? (
+                  <div className="space-y-3">
+                    <Empty icon={<ListChecks className="h-8 w-8" />} title="还没有勾选规则" description="打开规则库勾选需要执行的规则后，这里只显示已选的规则。" />
+                    <div className="text-center">
+                      <Button variant="outline" size="sm" onClick={openPicker}>
+                        <Plus className="h-3.5 w-3.5" /> 打开规则库
+                      </Button>
+                    </div>
+                  </div>
+                ) : selectedGroups.length === 0 ? (
+                  <Empty icon={<Search className="h-8 w-8" />} title="没有匹配的已选规则" description="换个关键词试试。" />
                 ) : (
                   <div className="space-y-2">
-                    {visibleGroups.map(([groupName, items]) => {
+                    {selectedGroups.map(([groupName, items]) => {
                       const fullItems = fullGroups.get(groupName) ?? items
                       const selectedCount = fullItems.filter((i) => selectedKeys.has(i.ruleKey)).length
-                      const allSelected = items.every((i) => selectedKeys.has(i.ruleKey))
                       const open = isGroupOpen(groupName, items)
                       return (
                         <div key={groupName} className="overflow-hidden rounded-xl border border-border/60">
@@ -510,9 +534,10 @@ export default function RulesPage() {
                             <button
                               type="button"
                               className="shrink-0 text-xs font-medium text-primary hover:underline"
-                              onClick={() => toggleCategory(items, !allSelected)}
+                              onClick={() => toggleCategory(fullItems, false)}
+                              title="从分组中移除该组所有已选规则"
                             >
-                              {allSelected ? '清空该组' : '全选该组'}
+                              移除该组
                             </button>
                           </div>
                           {open && (
@@ -595,6 +620,95 @@ export default function RulesPage() {
       )}
 
       <Dialog
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        title="添加规则"
+        width="max-w-2xl"
+        footer={
+          <>
+            <span className="mr-auto self-center text-xs text-foreground-subtle">
+              当前分组已选 {rules.length} / {catalog.length} 条
+            </span>
+            <Button onClick={() => setPickerOpen(false)}>完成</Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-subtle" />
+            <Input
+              value={pickerQuery}
+              onChange={(e) => setPickerQuery(e.target.value)}
+              placeholder="搜索规则名称或 key"
+              className="pl-8"
+            />
+          </div>
+          {pickerGroups.length === 0 ? (
+            <Empty icon={<Search className="h-8 w-8" />} title="没有匹配的规则" description="换个关键词试试。" />
+          ) : (
+            <div className="space-y-2">
+              {pickerGroups.map(([groupName, items]) => {
+                const fullItems = fullGroups.get(groupName) ?? items
+                const selectedCount = fullItems.filter((i) => selectedKeys.has(i.ruleKey)).length
+                const allSelected = items.every((i) => selectedKeys.has(i.ruleKey))
+                return (
+                  <div key={groupName} className="overflow-hidden rounded-xl border border-border/60">
+                    <div className="flex items-center gap-2 bg-white/45 px-3 py-2 dark:bg-white/[0.05]">
+                      <div className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {groupName}{' '}
+                        <span className={`text-xs tabular-nums ${selectedCount > 0 ? 'text-primary' : 'text-foreground-subtle'}`}>
+                          {selectedCount}/{fullItems.length}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="shrink-0 text-xs font-medium text-primary hover:underline"
+                        onClick={() => toggleCategory(items, !allSelected)}
+                      >
+                        {allSelected ? '清空该组' : '全选该组'}
+                      </button>
+                    </div>
+                    <div className="divide-y divide-border/70 border-t border-border/60">
+                      {items.map((item) => {
+                        const selected = selectedKeys.has(item.ruleKey)
+                        return (
+                          <label
+                            key={item.ruleKey}
+                            className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 transition-colors ${selected ? 'bg-primary-soft/25' : 'hover:bg-white/50 dark:hover:bg-white/[0.04]'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(e) => toggleRule(item, e.target.checked)}
+                              className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-primary"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span className="text-sm font-medium">{item.name}</span>
+                                {item.scope === 'site' && (
+                                  <span className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-medium text-primary-soft-foreground">站点级</span>
+                                )}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] text-foreground-subtle">
+                                <span className="font-mono">{item.ruleKey}</span>
+                                {item.description && (
+                                  <span className="text-foreground-muted"> · {item.description}</span>
+                                )}
+                              </div>
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </Dialog>
+
+      <Dialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         title="新建分组"
@@ -614,7 +728,7 @@ export default function RulesPage() {
             <Label>说明</Label>
             <Textarea rows={3} value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="可选" />
           </div>
-          <p className="text-xs text-foreground-subtle">创建后在右侧「规则库」中勾选要执行的规则。</p>
+          <p className="text-xs text-foreground-subtle">创建后点击「添加规则」，在规则库中勾选要执行的规则。</p>
         </div>
       </Dialog>
 

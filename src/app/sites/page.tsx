@@ -3,11 +3,13 @@
 import * as React from 'react'
 import { Plus, Pencil, Trash2, Globe, Upload, ExternalLink } from 'lucide-react'
 import { Button, Card, Dialog, Input, Textarea, Label, Empty } from '@/components/ui'
+import { useConfirm } from '@/components/confirm'
 import type { Site } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
 import { displayUrl } from '@/lib/display'
 
 export default function SitesPage() {
+  const confirm = useConfirm()
   const [sites, setSites] = React.useState<Site[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
@@ -73,14 +75,25 @@ export default function SitesPage() {
   }
 
   const remove = async (id: number) => {
-    if (!confirm('确认删除该站点？')) return
+    const site = sites.find((s) => s.id === id)
+    const ok = await confirm({
+      title: '删除站点',
+      description: site ? `确认删除站点「${site.name}」？此操作不可撤销。` : '确认删除该站点？此操作不可撤销。',
+      confirmText: '删除'
+    })
+    if (!ok) return
     await fetch(`/api/sites/${id}`, { method: 'DELETE' })
     load()
   }
 
   const removeMany = async () => {
     if (selected.size === 0) return
-    if (!confirm(`确认删除选中的 ${selected.size} 个站点？`)) return
+    const ok = await confirm({
+      title: '批量删除站点',
+      description: `将删除选中的 ${selected.size} 个站点，此操作不可撤销。`,
+      confirmText: `删除 ${selected.size} 项`
+    })
+    if (!ok) return
     await Promise.all([...selected].map((id) => fetch(`/api/sites/${id}`, { method: 'DELETE' })))
     setSelected(new Set())
     load()

@@ -4,6 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock, ImageUp, Smartphone, Monitor, ScrollText, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button, Card, Dialog, Input, Select, Empty, Spinner, StatusBadge } from '@/components/ui'
+import { useConfirm } from '@/components/confirm'
 import type { Task, Site, RuleSet, CheckResult } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
 import { displayUrl, pageLabel } from '@/lib/display'
@@ -36,6 +37,7 @@ type TaskListResponse = {
 const PAGE_SIZE_OPTIONS = [10, 20, 50]
 
 export default function RunsPage() {
+  const confirm = useConfirm()
   const [tasks, setTasks] = React.useState<TaskRow[]>([])
   const [sites, setSites] = React.useState<Site[]>([])
   const [ruleSets, setRuleSets] = React.useState<RuleSet[]>([])
@@ -56,11 +58,14 @@ export default function RunsPage() {
   const [taskLogs, setTaskLogs] = React.useState<string[]>([])
   const [logsOpen, setLogsOpen] = React.useState(false)
   const [cancelling, setCancelling] = React.useState<number | null>(null)
+  const [selectedTasks, setSelectedTasks] = React.useState<Set<number>>(new Set())
+  const [deleting, setDeleting] = React.useState(false)
   const [page, setPage] = React.useState(1)
   const [pageSize, setPageSize] = React.useState(10)
   const [total, setTotal] = React.useState(0)
   const [runningCount, setRunningCount] = React.useState(0)
   const shotFileRef = React.useRef<HTMLInputElement | null>(null)
+  const selectAllRef = React.useRef<HTMLInputElement | null>(null)
   const shotStrategyRef = React.useRef<'mobile' | 'desktop'>('mobile')
   /** 当前运行中任务数（ref 版，供轮询调度判断） */
   const runningRef = React.useRef(0)
@@ -136,7 +141,12 @@ export default function RunsPage() {
   }
 
   const deleteTask = async (id: number) => {
-    if (!confirm(`确认删除任务 #${id}？其全部检测结果与截图将被清除。`)) return
+    const ok = await confirm({
+      title: '删除任务',
+      description: `确认删除任务 #${id}？其全部检测结果与截图将被清除，此操作不可撤销。`,
+      confirmText: '删除'
+    })
+    if (!ok) return
     try {
       const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
       if (!res.ok) {
@@ -153,7 +163,12 @@ export default function RunsPage() {
   }
 
   const cancelTask = async (id: number) => {
-    if (!confirm(`确定终止任务 #${id} 吗？已完成的检测结果会被保留。`)) return
+    const ok = await confirm({
+      title: '终止任务',
+      description: `确定终止任务 #${id} 吗？已完成的检测结果会被保留。`,
+      confirmText: '终止'
+    })
+    if (!ok) return
     setCancelling(id)
     try {
       await fetch(`/api/tasks/${id}/cancel`, { method: 'POST' })
@@ -162,6 +177,44 @@ export default function RunsPage() {
       setError('终止请求失败，请重试')
     } finally {
       setCancelling(null)
+    }
+  }
+
+  const deleteSelected = async () => {
+    const ids = [...selectedTasks]
+    if (ids.length === 0) return
+    const ok = await confirm({
+      title: '批量删除任务',
+      description: `将删除选中的 ${ids.length} 个任务，及其全部检测结果与截图，此操作不可撤销。`,
+      confirmText: `删除 ${ids.length} 项`
+    })
+    if (!ok) return
+    setDeleting(true)
+    try {
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}))
+            return { id, error: (body as { error?: string }).error ?? '删除失败' }
+          }
+          return { id, error: '' }
+        })
+      )
+      const failed = results.filter((r) => r.error)
+      if (selectedTask && ids.includes(selectedTask.id)) setSelectedTask(null)
+      setSelectedTasks(new Set(failed.map((r) => r.id)))
+      if (failed.length > 0) {
+        setError(`${failed.length} 个任务删除失败：${failed[0].error}`)
+      } else {
+        setError('')
+      }
+      // 当前页被清空时回到上一页
+      const remaining = tasks.filter((t) => !ids.includes(t.id)).length
+      if (failed.length === 0 && remaining === 0 && page > 1) setPage((p) => p - 1)
+      else loadAll()
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -267,6 +320,39 @@ export default function RunsPage() {
   const pageGroups = groupResultsByPage(filteredResults)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
+  const selectableTaskIds = tasks.filter((t) => t.status !== 'running').map((t) => t.id)
+  const allSelectableSelected = selectableTaskIds.length > 0 && selectableTaskIds.every((id) => selectedTasks.has(id))
+  const someSelectableSelected = selectableTaskIds.some((id) => selectedTasks.has(id))
+
+  React.useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someSelectableSelected && !allSelectableSelected
+    }
+  }, [someSelectableSelected, allSelectableSelected])
+
+  // 翻页或刷新后，剔除已不在当前页的选中项
+  React.useEffect(() => {
+    setSelectedTasks((prev) => {
+      if (prev.size === 0) return prev
+      const valid = new Set(tasks.map((t) => t.id))
+      const next = new Set([...prev].filter((id) => valid.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [tasks])
+
+  const toggleTask = (id: number) => {
+    setSelectedTasks((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAllTasks = () => {
+    setSelectedTasks(allSelectableSelected ? new Set() : new Set(selectableTaskIds))
+  }
+
   return (
     <div className="space-y-6">
       {/* 页头 */}
@@ -276,6 +362,11 @@ export default function RunsPage() {
           <p className="mt-0.5 text-sm text-foreground-muted">选择站点与分组，一键开展合规性检测；后台真实浏览器执行。</p>
         </div>
         <div className="flex gap-2">
+          {selectedTasks.size > 0 && (
+            <Button variant="danger" size="sm" onClick={deleteSelected} disabled={deleting}>
+              {deleting ? <Spinner /> : <Trash2 className="h-3.5 w-3.5" />} 删除选中（{selectedTasks.size}）
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={loadAll}>
             <RefreshCw className="h-3.5 w-3.5" /> 刷新
           </Button>
@@ -315,6 +406,18 @@ export default function RunsPage() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-border/60 bg-white/40 text-xs text-foreground-muted backdrop-blur-sm dark:bg-white/[0.04]">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      className="accent-blue-600 disabled:opacity-40"
+                      checked={allSelectableSelected}
+                      onChange={toggleAllTasks}
+                      disabled={selectableTaskIds.length === 0}
+                      aria-label="全选当前页可删除任务"
+                      title="全选当前页可删除任务（运行中的任务不可删除）"
+                    />
+                  </th>
                   <th className="px-4 py-3 font-medium">ID</th>
                   <th className="px-4 py-3 font-medium">站点</th>
                   <th className="px-4 py-3 font-medium">分组</th>
@@ -331,6 +434,17 @@ export default function RunsPage() {
                     onClick={() => openTask(t)}
                     className="cursor-pointer border-b border-border/60 transition-colors hover:bg-white/55 dark:hover:bg-white/[0.05]"
                   >
+                    <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="accent-blue-600 disabled:opacity-40"
+                        checked={selectedTasks.has(t.id)}
+                        onChange={() => toggleTask(t.id)}
+                        disabled={t.status === 'running'}
+                        aria-label={`选择任务 #${t.id}`}
+                        title={t.status === 'running' ? '运行中的任务不可删除' : undefined}
+                      />
+                    </td>
                     <td className="px-4 py-3.5 font-mono text-xs text-foreground-subtle">#{t.id}</td>
                     <td className="px-4 py-3.5">
                       <div className="font-medium">{t.site?.name ?? `站点#${t.siteId}`}</div>
