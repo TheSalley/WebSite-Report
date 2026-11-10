@@ -1,113 +1,183 @@
+'use client'
+
+import * as React from 'react'
 import Link from 'next/link'
-import { ShieldCheck, Globe, ListChecks, FileText, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react'
+import { ArrowRight, Activity, Globe, ListChecks, Play, ShieldCheck } from 'lucide-react'
+import { Button, Card, Empty, PageHeader, StatusBadge } from '@/components/ui'
+import type { RuleSet, Site } from '@/lib/types'
+import type { TaskRow } from '@/lib/runs-view'
+import { fmtTime } from '@/lib/runs-view'
+import { displayUrl } from '@/lib/display'
+import { fetchJson, friendlyError } from '@/lib/client-fetch'
 
-const features = [
-  {
-    icon: Globe,
-    title: '真实浏览器检测',
-    desc: 'Playwright 无头 Chromium 渲染页面，支持 JS/SPA、移动端模拟，非简单 HTTP 抓取。',
-    accent: 'from-blue-500 to-indigo-500'
-  },
-  {
-    icon: ListChecks,
-    title: '27 条内置规则',
-    desc: '内置规则库覆盖 SEO、性能、安全、内容与合规，按需勾选组成检测分组。',
-    accent: 'from-emerald-500 to-teal-500'
-  },
-  {
-    icon: FileText,
-    title: '截图取证与报告',
-    desc: '自动全页截图取证，一键生成所见即所得报告（可打印 PDF）。',
-    accent: 'from-amber-500 to-orange-500'
-  },
-  {
-    icon: ShieldCheck,
-    title: 'PageSpeed 性能评分',
-    desc: '调用 Google PageSpeed Insights 在线评分，覆盖移动端与桌面端。',
-    accent: 'from-violet-500 to-purple-500'
-  }
-]
+type TaskListResponse = {
+  items: TaskRow[]
+  total: number
+  running: number
+}
 
-const steps = ['添加站点', '选择分组', '开始检测', '查看报告']
+export default function OverviewPage() {
+  const [tasks, setTasks] = React.useState<TaskRow[]>([])
+  const [sites, setSites] = React.useState<Site[]>([])
+  const [ruleSets, setRuleSets] = React.useState<RuleSet[]>([])
+  const [total, setTotal] = React.useState(0)
+  const [running, setRunning] = React.useState(0)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState('')
 
-export default function Home() {
+  const load = React.useCallback(async () => {
+    try {
+      const [taskData, siteData, setData] = await Promise.all([
+        fetchJson<TaskListResponse>('/api/tasks?page=1&pageSize=6'),
+        fetchJson<Site[]>('/api/sites'),
+        fetchJson<RuleSet[]>('/api/rulesets')
+      ])
+      setTasks(taskData.items)
+      setTotal(taskData.total)
+      setRunning(taskData.running)
+      setSites(siteData)
+      setRuleSets(setData)
+      setError('')
+    } catch (e) {
+      setError(friendlyError(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = async () => {
+      await load()
+      if (!stopped && running > 0) timer = setTimeout(tick, 4000)
+    }
+    void tick()
+    return () => {
+      stopped = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [load, running])
+
+  const ruleCount = ruleSets.reduce((sum, set) => sum + (set.ruleCount ?? 0), 0)
+  const latest = tasks[0]
+
   return (
-    <div className="space-y-10">
-      {/* Hero */}
-      <section className="glass relative overflow-hidden rounded-3xl p-8 sm:p-12">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
+    <div className="space-y-8">
+      <PageHeader
+        title="概览"
+        description="查看当前检测状态，或直接开始一次新的检测。"
+        actions={
+          <Link href="/runs">
+            <Button>
+              <Play className="h-4 w-4" /> 开始检测
+            </Button>
+          </Link>
+        }
+      />
 
-        <div className="relative">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary-soft px-3 py-1 text-xs font-medium text-primary-soft-foreground">
-            <Sparkles className="h-3.5 w-3.5" /> 自动化合规检测引擎
-          </span>
-          <h1 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">
-            网站合规性检测
-          </h1>
-          <p className="mt-3 max-w-2xl leading-7 text-foreground-muted">
-            输入网址，选择分组，真实浏览器深度检测站点合规性，自动截图取证并生成交付报告。
-            面向质检/合规人员、项目交付与网站运营人员。
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Link
-              href="/runs"
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary-hover"
-            >
-              开始检测 <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+      {error && <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>}
 
-          {/* 流程条 */}
-          <div className="mt-9 flex flex-wrap items-center gap-2 text-xs text-foreground-muted">
-            {steps.map((s, i) => (
-              <span key={s} className="flex items-center gap-2">
-                {i > 0 && <span className="h-px w-6 bg-border-strong" />}
-                <span className="inline-flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> {s}
-                </span>
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 特性卡片 */}
-      <section className="grid gap-4 sm:grid-cols-2">
-        {features.map((f) => {
-          const Icon = f.icon
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { label: '站点', value: sites.length, icon: Globe, href: '/sites' },
+          { label: '检测记录', value: total, icon: Activity, href: '/runs' },
+          { label: '正在运行', value: running, icon: ShieldCheck, href: '/runs' },
+          { label: '启用规则', value: ruleCount, icon: ListChecks, href: '/rules' }
+        ].map((item) => {
+          const Icon = item.icon
           return (
-            <div
-              key={f.title}
-              className="glass glass-hover group relative overflow-hidden rounded-2xl p-5"
-            >
-              <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${f.accent}`} />
-              <div className="flex items-center gap-3">
-                <span className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${f.accent} text-white shadow-sm`}>
-                  <Icon className="h-4.5 w-4.5" />
-                </span>
-                <h2 className="text-sm font-semibold">{f.title}</h2>
+            <Link key={item.label} href={item.href} className="panel rounded-xl px-4 py-4 transition-colors hover:border-border-strong">
+              <div className="flex items-center justify-between text-xs text-foreground-muted">
+                <span>{item.label}</span>
+                <Icon className="h-4 w-4 text-foreground-subtle" />
               </div>
-              <p className="mt-3 text-sm leading-6 text-foreground-muted">{f.desc}</p>
-            </div>
+              <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{loading ? '—' : item.value}</div>
+            </Link>
           )
         })}
       </section>
 
-      {/* 底部统计带 */}
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {[
-          { num: '27', label: '内置检测规则' },
-          { num: '5', label: '检测维度' },
-          { num: '2', label: 'PageSpeed 通道' },
-          { num: 'PDF', label: '报告导出' }
-        ].map((s) => (
-          <div key={s.label} className="glass rounded-2xl px-5 py-4 text-center">
-            <div className="font-mono text-2xl font-bold text-primary">{s.num}</div>
-            <div className="mt-1 text-xs text-foreground-muted">{s.label}</div>
+      {!loading && (sites.length === 0 || ruleSets.length === 0) && (
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold">开始前还需要准备</h2>
+          <div className="mt-3 space-y-2 text-sm text-foreground-muted">
+            {sites.length === 0 && (
+              <p>
+                先添加一个检测站点。<Link className="ml-1 font-medium text-primary hover:underline" href="/sites">去添加站点</Link>
+              </p>
+            )}
+            {ruleSets.length === 0 && (
+              <p>
+                选择或新建一套检测规则。<Link className="ml-1 font-medium text-primary hover:underline" href="/rules">去配置规则</Link>
+              </p>
+            )}
           </div>
-        ))}
+        </Card>
+      )}
+
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">最近检测</h2>
+            <p className="mt-0.5 text-xs text-foreground-muted">最近 6 条记录</p>
+          </div>
+          <Link href="/runs" className="inline-flex items-center gap-1 text-xs font-medium text-foreground-muted hover:text-foreground">
+            查看全部 <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        {loading ? (
+          <Card className="p-8 text-center text-sm text-foreground-subtle">加载中…</Card>
+        ) : tasks.length === 0 ? (
+          <Empty
+            icon={<ShieldCheck className="h-7 w-7" />}
+            title="还没有检测记录"
+            description="添加站点并选择规则后，从检测页开始第一次检测。"
+          />
+        ) : (
+          <Card className="divide-y divide-border overflow-hidden">
+            {tasks.map((task) => (
+              <Link
+                key={task.id}
+                href={`/runs/${task.id}`}
+                className="grid gap-3 px-4 py-3.5 transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate font-medium">{task.site?.name ?? `站点 #${task.siteId}`}</span>
+                    <StatusBadge status={task.status} />
+                  </div>
+                  <div className="mt-0.5 truncate text-xs text-foreground-subtle">{displayUrl(task.site?.url ?? '')}</div>
+                </div>
+                <div className="text-xs text-foreground-muted">
+                  <span className="text-success">{task.passCount} 通过</span>
+                  <span className="mx-1.5 text-border-strong">/</span>
+                  <span className="text-danger">{task.failCount} 失败</span>
+                </div>
+                <div className="text-xs tabular-nums text-foreground-subtle">{fmtTime(task.startedAt)}</div>
+              </Link>
+            ))}
+          </Card>
+        )}
       </section>
+
+      {latest?.status === 'running' && latest.progress && (
+        <Link href={`/runs/${latest.id}`} className="panel block rounded-xl px-4 py-3 text-sm transition-colors hover:border-border-strong">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium">正在检测 {latest.site?.name ?? `站点 #${latest.siteId}`}</span>
+            <span className="text-xs text-foreground-muted">
+              {latest.progress.queued ? '排队中' : `${latest.progress.done}/${latest.progress.total}`}
+            </span>
+          </div>
+          <div className="mt-2 h-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-500"
+              style={{ width: `${Math.round((latest.progress.done / Math.max(latest.progress.total, 1)) * 100)}%` }}
+            />
+          </div>
+        </Link>
+      )}
     </div>
   )
 }

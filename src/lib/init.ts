@@ -1,4 +1,5 @@
 import { DATA_DIR, listRuleSets, createRuleSet, replaceRules, getSettings, saveSettings } from './store'
+import { getDb } from './db'
 import { BUILTIN_RULE_SETS, toRuleRows } from './seed'
 import { logInfo } from './logger'
 import { recoverInterruptedTasks } from './task-service'
@@ -15,6 +16,8 @@ const SEED_KEY = 'seed.defaultRuleGroups'
  * - 首次运行时创建默认规则分组；用户删除或修改后不会再次自动创建
  */
 export async function initData(): Promise<void> {
+  // 最优先打开数据库：确保 kind / 兼容列与一次性数据迁移先完成
+  getDb()
   await mkdir(join(DATA_DIR, 'screenshots'), { recursive: true })
 
   await recoverInterruptedTasks()

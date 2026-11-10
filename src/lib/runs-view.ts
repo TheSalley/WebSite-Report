@@ -1,9 +1,35 @@
-import type { CheckResult, CheckStatus } from './types'
+import type { CheckResult, CheckStatus, Task } from './types'
+import { isArtifactResult, isCheckResult, isDeliverableResult } from './rule-kinds'
 
-/** 按状态计数：'all' 返回结果总数，其余按状态过滤 */
+/** 任务列表/详情共用的运行进度结构 */
+export type TaskProgress = {
+  done: number
+  total: number
+  ruleKey: string
+  ruleName: string
+  status: string
+  error?: string
+  phase?: string
+  phaseName?: string
+  phaseIndex?: number
+  phaseCount?: number
+  queued?: boolean
+}
+
+export type TaskRow = Task & { progress: TaskProgress | null }
+
+/**
+ * 状态 Tab 计数：
+ * - all：检测 + 合同文案（不含功能产物）
+ * - verify：仅合同文案的待验收
+ * - pass / warn / fail / skip：仅自动检测
+ */
 export function statusCounts(results: CheckResult[], key: CheckStatus | 'all'): number {
-  if (key === 'all') return results.length
-  return results.filter((r) => r.status === key).length
+  if (key === 'all') return results.filter((r) => !isArtifactResult(r)).length
+  if (key === 'verify') {
+    return results.filter((r) => isDeliverableResult(r) && r.status === 'verify').length
+  }
+  return results.filter((r) => isCheckResult(r) && r.status === key).length
 }
 
 /** 按页面 URL 分组（空 URL 归入首页组），保持结果顺序 */

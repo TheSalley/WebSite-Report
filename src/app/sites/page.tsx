@@ -1,8 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import { Plus, Pencil, Trash2, Globe, Upload, ExternalLink } from 'lucide-react'
-import { Button, Card, Dialog, Input, Textarea, Label, Empty } from '@/components/ui'
+import { ExternalLink, Globe, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { Button, Card, Dialog, Empty, Input, Label, PageHeader, Spinner, Textarea } from '@/components/ui'
 import { useConfirm } from '@/components/confirm'
 import type { Site } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
@@ -18,9 +18,10 @@ export default function SitesPage() {
   const [editing, setEditing] = React.useState<Site | null>(null)
   const [form, setForm] = React.useState({ name: '', url: '', remark: '' })
   const [importText, setImportText] = React.useState('')
-  const [selected, setSelected] = React.useState<Set<number>>(new Set())
+  const [saving, setSaving] = React.useState(false)
+  const [notice, setNotice] = React.useState('')
 
-  const load = async () => {
+  const load = React.useCallback(async () => {
     try {
       setSites(await fetchJson<Site[]>('/api/sites'))
       setError('')
@@ -29,11 +30,9 @@ export default function SitesPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  React.useEffect(() => {
-    load()
   }, [])
+
+  React.useEffect(() => { void load() }, [load])
 
   const openCreate = () => {
     setEditing(null)
@@ -52,167 +51,118 @@ export default function SitesPage() {
       setError('名称和 URL 为必填项')
       return
     }
+    setSaving(true)
     try {
-      if (editing) {
-        await fetch(`/api/sites/${editing.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form)
-        })
-      } else {
-        await fetch('/api/sites', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form)
-        })
-      }
+      const url = editing ? `/api/sites/${editing.id}` : '/api/sites'
+      const res = await fetch(url, {
+        method: editing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error ?? '保存失败')
       setEditOpen(false)
       setError('')
-      load()
+      await load()
     } catch (e) {
-      setError((e as Error).message)
+      setError(friendlyError(e))
+    } finally {
+      setSaving(false)
     }
   }
 
-  const remove = async (id: number) => {
-    const site = sites.find((s) => s.id === id)
+  const remove = async (site: Site) => {
     const ok = await confirm({
       title: '删除站点',
-      description: site ? `确认删除站点「${site.name}」？此操作不可撤销。` : '确认删除该站点？此操作不可撤销。',
+      description: `确认删除「${site.name}」？此操作不可撤销。`,
       confirmText: '删除'
     })
     if (!ok) return
-    await fetch(`/api/sites/${id}`, { method: 'DELETE' })
-    load()
-  }
-
-  const removeMany = async () => {
-    if (selected.size === 0) return
-    const ok = await confirm({
-      title: '批量删除站点',
-      description: `将删除选中的 ${selected.size} 个站点，此操作不可撤销。`,
-      confirmText: `删除 ${selected.size} 项`
-    })
-    if (!ok) return
-    await Promise.all([...selected].map((id) => fetch(`/api/sites/${id}`, { method: 'DELETE' })))
-    setSelected(new Set())
-    load()
+    try {
+      await fetch(`/api/sites/${site.id}`, { method: 'DELETE' })
+      await load()
+    } catch (e) {
+      setError(friendlyError(e))
+    }
   }
 
   const doImport = async () => {
-    const urls = importText.split('\n').map((s) => s.trim()).filter(Boolean)
+    const urls = importText.split('\n').map((item) => item.trim()).filter(Boolean)
     if (urls.length === 0) return
-    const res = await fetch('/api/sites/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls })
-    })
-    const body = await res.json()
-    setImportText('')
-    setImportOpen(false)
-    alert(`导入完成：新增 ${body.created} 个，跳过 ${body.skipped} 个`)
-    load()
-  }
-
-  const toggle = (id: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const toggleAll = () => {
-    setSelected((prev) => (prev.size === sites.length ? new Set() : new Set(sites.map((s) => s.id))))
+    setSaving(true)
+    try {
+      const res = await fetch('/api/sites/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls })
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error ?? '导入失败')
+      setImportText('')
+      setImportOpen(false)
+      setNotice(`导入完成：新增 ${body.created ?? 0} 个，跳过 ${body.skipped ?? 0} 个`)
+      await load()
+    } catch (e) {
+      setError(friendlyError(e))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">站点管理</h1>
-          <p className="mt-0.5 text-sm text-foreground-muted">维护待检测的站点清单，支持批量导入。</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-            <Upload className="h-3.5 w-3.5" /> 批量导入
-          </Button>
-          {selected.size > 0 && (
-            <Button variant="danger" size="sm" onClick={removeMany}>
-              <Trash2 className="h-3.5 w-3.5" /> 删除选中（{selected.size}）
+    <div className="space-y-7">
+      <PageHeader
+        title="站点"
+        description="维护需要检测的网站。"
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+              <Upload className="h-3.5 w-3.5" /> 批量导入
             </Button>
-          )}
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" /> 新建站点
-          </Button>
-        </div>
-      </div>
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" /> 新建站点
+            </Button>
+          </>
+        }
+      />
 
-      {error && <div className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>}
+      {error && <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>}
+      {notice && <div className="rounded-lg bg-success-soft px-4 py-3 text-sm text-success-soft-foreground">{notice}</div>}
 
       {loading ? (
-        <div className="flex justify-center py-16"><span className="text-sm text-foreground-subtle">加载中…</span></div>
+        <Card className="flex justify-center py-16"><Spinner /></Card>
       ) : sites.length === 0 ? (
-        <Empty icon={<Globe className="h-8 w-8" />} title="还没有站点" description="点击「新建站点」或「批量导入」添加待检测网站。" />
+        <Empty icon={<Globe className="h-7 w-7" />} title="还没有站点" description="新建一个站点，或批量导入网址清单。" />
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border/60 bg-white/40 text-xs text-foreground-muted backdrop-blur-sm dark:bg-white/[0.04]">
-                  <th className="w-8 px-4 py-3">
-                    <input
-                      type="checkbox"
-                      className="accent-blue-600"
-                      checked={selected.size === sites.length && sites.length > 0}
-                      onChange={toggleAll}
-                      aria-label="全选"
-                    />
-                  </th>
-                  <th className="px-4 py-3 font-medium">名称</th>
-                  <th className="px-4 py-3 font-medium">URL</th>
-                  <th className="px-4 py-3 font-medium">备注</th>
-                  <th className="px-4 py-3 font-medium">创建时间</th>
-                  <th className="px-4 py-3 text-right font-medium">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sites.map((s) => (
-                  <tr key={s.id} className="border-b border-border/60 transition-colors hover:bg-white/55 dark:hover:bg-white/[0.05]">
-                    <td className="px-4 py-3.5">
-                      <input
-                        type="checkbox"
-                        className="accent-blue-600"
-                        checked={selected.has(s.id)}
-                        onChange={() => toggle(s.id)}
-                        aria-label={`选择 ${s.name}`}
-                      />
-                    </td>
-                    <td className="px-4 py-3.5 font-medium">{s.name}</td>
-                    <td className="px-4 py-3.5">
-                      <a href={s.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
-                        <span className="max-w-[220px] truncate">{displayUrl(s.url)}</span>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    </td>
-                    <td className="max-w-[200px] truncate px-4 py-3.5 text-xs text-foreground-subtle">{s.remark || '—'}</td>
-                    <td className="px-4 py-3.5 text-xs text-foreground-subtle">{new Date(s.createdAt).toLocaleDateString('zh-CN')}</td>
-                    <td className="px-4 py-3.5 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => remove(s.id)}>
-                          <Trash2 className="h-3.5 w-3.5 text-danger" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <Card className="divide-y divide-border overflow-hidden">
+          {sites.map((site) => (
+            <div key={site.id} className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] sm:items-center">
+              <div className="min-w-0">
+                <div className="truncate font-medium">{site.name}</div>
+                {site.remark && <div className="mt-0.5 truncate text-xs text-foreground-subtle">{site.remark}</div>}
+              </div>
+              <a
+                href={site.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-w-0 items-center gap-1.5 text-sm text-foreground-muted hover:text-primary"
+              >
+                <span className="truncate">{displayUrl(site.url)}</span>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              </a>
+              <div className="flex items-center justify-between gap-2 sm:justify-end">
+                <span className="text-xs tabular-nums text-foreground-subtle">{new Date(site.createdAt).toLocaleDateString('zh-CN')}</span>
+                <div className="flex items-center gap-0.5">
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(site)} aria-label={`编辑 ${site.name}`}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => remove(site)} aria-label={`删除 ${site.name}`}>
+                    <Trash2 className="h-3.5 w-3.5 text-danger" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
         </Card>
       )}
 
@@ -223,24 +173,24 @@ export default function SitesPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setEditOpen(false)}>取消</Button>
-            <Button onClick={save}>保存</Button>
+            <Button onClick={save} disabled={saving}>{saving && <Spinner />} 保存</Button>
           </>
         }
       >
         <div className="space-y-4">
-          <div className="space-y-1.5">
+          <label className="block space-y-1.5">
             <Label>站点名称</Label>
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="例如：公司官网" />
-          </div>
-          <div className="space-y-1.5">
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="例如：公司官网" autoFocus />
+          </label>
+          <label className="block space-y-1.5">
             <Label>URL</Label>
             <Input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://example.com" />
-            <p className="text-xs text-foreground-subtle">未填写协议时自动补全为 https://</p>
-          </div>
-          <div className="space-y-1.5">
+            <span className="block text-xs text-foreground-subtle">未填写协议时自动补全为 https://</span>
+          </label>
+          <label className="block space-y-1.5">
             <Label>备注</Label>
             <Textarea value={form.remark} onChange={(e) => setForm({ ...form, remark: e.target.value })} rows={3} placeholder="可选" />
-          </div>
+          </label>
         </div>
       </Dialog>
 
@@ -251,13 +201,13 @@ export default function SitesPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setImportOpen(false)}>取消</Button>
-            <Button onClick={doImport}>导入</Button>
+            <Button onClick={doImport} disabled={saving}>{saving && <Spinner />} 导入</Button>
           </>
         }
       >
         <div className="space-y-3">
-          <p className="text-sm text-foreground-muted">每行一个 URL，站点名称自动取主机名；重复地址将跳过。</p>
-          <Textarea rows={8} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder={"https://example.com\nhttps://example.org"} />
+          <p className="text-sm text-foreground-muted">每行一个 URL，名称自动取主机名，重复地址会跳过。</p>
+          <Textarea rows={8} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder={'https://example.com\nhttps://example.org'} />
         </div>
       </Dialog>
     </div>

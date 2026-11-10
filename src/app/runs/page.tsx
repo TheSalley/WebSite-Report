@@ -2,29 +2,15 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Play, Trash2, RefreshCw, ShieldCheck, FileText, X, BarChart3, Clock, ImageUp, Smartphone, Monitor, ScrollText, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Button, Card, Dialog, Input, Select, Empty, Spinner, StatusBadge } from '@/components/ui'
+import { useRouter } from 'next/navigation'
+import { ChevronLeft, ChevronRight, Play, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
+import { Button, Card, Dialog, Empty, PageHeader, Select, Spinner, StatusBadge } from '@/components/ui'
 import { useConfirm } from '@/components/confirm'
-import type { Task, Site, RuleSet, CheckResult } from '@/lib/types'
+import type { RuleSet, Site } from '@/lib/types'
+import type { TaskRow } from '@/lib/runs-view'
+import { fmtTime } from '@/lib/runs-view'
+import { displayUrl } from '@/lib/display'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
-import { displayUrl, pageLabel } from '@/lib/display'
-import { fmtTime, groupResultsByPage, psShotUrl, statusCounts, STATUS_FILTERS } from '@/lib/runs-view'
-
-type TaskRow = Task & {
-  progress: {
-    done: number
-    total: number
-    ruleKey: string
-    ruleName: string
-    status: string
-    error?: string
-    phase?: string
-    phaseName?: string
-    phaseIndex?: number
-    phaseCount?: number
-    queued?: boolean
-  } | null
-}
 
 type TaskListResponse = {
   items: TaskRow[]
@@ -34,65 +20,40 @@ type TaskListResponse = {
   running: number
 }
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50]
-
 export default function RunsPage() {
   const confirm = useConfirm()
+  const router = useRouter()
   const [tasks, setTasks] = React.useState<TaskRow[]>([])
   const [sites, setSites] = React.useState<Site[]>([])
   const [ruleSets, setRuleSets] = React.useState<RuleSet[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
+  const [total, setTotal] = React.useState(0)
+  const [running, setRunning] = React.useState(0)
+  const [page, setPage] = React.useState(1)
+  const [pageSize, setPageSize] = React.useState(10)
   const [startOpen, setStartOpen] = React.useState(false)
   const [siteId, setSiteId] = React.useState('')
   const [ruleSetId, setRuleSetId] = React.useState('')
   const [starting, setStarting] = React.useState(false)
-  const [selectedTask, setSelectedTask] = React.useState<TaskRow | null>(null)
-  const [results, setResults] = React.useState<CheckResult[]>([])
-  const [resultsLoading, setResultsLoading] = React.useState(false)
-  const [statusFilter, setStatusFilter] = React.useState('all')
-  const [deliverableDrafts, setDeliverableDrafts] = React.useState<Record<number, string>>({})
-  const [savingDeliverables, setSavingDeliverables] = React.useState(false)
-  const [shotUploading, setShotUploading] = React.useState<'' | 'mobile' | 'desktop'>('')
-  const [shotVersion, setShotVersion] = React.useState(0)
-  const [taskLogs, setTaskLogs] = React.useState<string[]>([])
-  const [logsOpen, setLogsOpen] = React.useState(false)
-  const [cancelling, setCancelling] = React.useState<number | null>(null)
-  const [selectedTasks, setSelectedTasks] = React.useState<Set<number>>(new Set())
-  const [deleting, setDeleting] = React.useState(false)
-  const [page, setPage] = React.useState(1)
-  const [pageSize, setPageSize] = React.useState(10)
-  const [total, setTotal] = React.useState(0)
-  const [runningCount, setRunningCount] = React.useState(0)
-  const shotFileRef = React.useRef<HTMLInputElement | null>(null)
-  const selectAllRef = React.useRef<HTMLInputElement | null>(null)
-  const shotStrategyRef = React.useRef<'mobile' | 'desktop'>('mobile')
-  /** 当前运行中任务数（ref 版，供轮询调度判断） */
   const runningRef = React.useRef(0)
 
-  const loadAll = React.useCallback(async () => {
+  const load = React.useCallback(async () => {
     try {
-      const [t, s, rs] = await Promise.all([
+      const [taskData, siteData, setData] = await Promise.all([
         fetchJson<TaskListResponse>(`/api/tasks?page=${page}&pageSize=${pageSize}`),
         fetchJson<Site[]>('/api/sites'),
         fetchJson<RuleSet[]>('/api/rulesets')
       ])
-      setTasks(t.items)
-      setTotal(t.total)
-      setRunningCount(t.running)
-      runningRef.current = t.running
-      // 当前页超出总页数（如删除后）时回退到最后一页
-      const totalPages = Math.max(1, Math.ceil(t.total / pageSize))
-      if (page > totalPages && totalPages > 0) {
-        setPage(totalPages)
-        return
-      }
-      setSites(s)
-      setRuleSets(rs)
+      setTasks(taskData.items)
+      setTotal(taskData.total)
+      setRunning(taskData.running)
+      runningRef.current = taskData.running
+      setSites(siteData)
+      setRuleSets(setData)
       setError('')
     } catch (e) {
       setError(friendlyError(e))
-      // 请求失败时不动已加载数据，仅提示
     } finally {
       setLoading(false)
     }
@@ -102,8 +63,7 @@ export default function RunsPage() {
     let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const tick = async () => {
-      await loadAll()
-      // 仅在有任务运行中时持续轮询（3s）；空闲时只加载一次，避免无谓请求
+      await load()
       if (!stopped && runningRef.current > 0) timer = setTimeout(tick, 3000)
     }
     void tick()
@@ -111,7 +71,7 @@ export default function RunsPage() {
       stopped = true
       if (timer) clearTimeout(timer)
     }
-  }, [loadAll])
+  }, [load])
 
   const openStart = () => {
     setSiteId(sites[0] ? String(sites[0].id) : '')
@@ -127,408 +87,166 @@ export default function RunsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ siteId: Number(siteId), ruleSetId: Number(ruleSetId) })
       })
-      const body = await res.json()
+      const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error ?? '启动失败')
       setStartOpen(false)
-      // 启动后恢复轮询直到任务结束
       runningRef.current += 1
-      loadAll()
+      await load()
+      if (body.id) router.push(`/runs/${body.id}`)
     } catch (e) {
-      setError((e as Error).message)
+      setError(friendlyError(e))
     } finally {
       setStarting(false)
     }
   }
 
-  const deleteTask = async (id: number) => {
+  const deleteTask = async (task: TaskRow) => {
     const ok = await confirm({
-      title: '删除任务',
-      description: `确认删除任务 #${id}？其全部检测结果与截图将被清除，此操作不可撤销。`,
+      title: '删除检测记录',
+      description: `确认删除「${task.site?.name ?? `任务 #${task.id}`}」这次检测？全部结果与截图都会清除。`,
       confirmText: '删除'
     })
     if (!ok) return
     try {
-      const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error ?? '删除失败')
       }
-      if (selectedTask?.id === id) setSelectedTask(null)
-      // 当前页只剩一条时回到上一页，避免出现空页
       if (tasks.length === 1 && page > 1) setPage((p) => p - 1)
-      else loadAll()
+      else await load()
     } catch (e) {
-      setError((e as Error).message)
+      setError(friendlyError(e))
     }
   }
 
-  const cancelTask = async (id: number) => {
-    const ok = await confirm({
-      title: '终止任务',
-      description: `确定终止任务 #${id} 吗？已完成的检测结果会被保留。`,
-      confirmText: '终止'
-    })
-    if (!ok) return
-    setCancelling(id)
-    try {
-      await fetch(`/api/tasks/${id}/cancel`, { method: 'POST' })
-      await loadAll()
-    } catch {
-      setError('终止请求失败，请重试')
-    } finally {
-      setCancelling(null)
-    }
-  }
-
-  const deleteSelected = async () => {
-    const ids = [...selectedTasks]
-    if (ids.length === 0) return
-    const ok = await confirm({
-      title: '批量删除任务',
-      description: `将删除选中的 ${ids.length} 个任务，及其全部检测结果与截图，此操作不可撤销。`,
-      confirmText: `删除 ${ids.length} 项`
-    })
-    if (!ok) return
-    setDeleting(true)
-    try {
-      const results = await Promise.all(
-        ids.map(async (id) => {
-          const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}))
-            return { id, error: (body as { error?: string }).error ?? '删除失败' }
-          }
-          return { id, error: '' }
-        })
-      )
-      const failed = results.filter((r) => r.error)
-      if (selectedTask && ids.includes(selectedTask.id)) setSelectedTask(null)
-      setSelectedTasks(new Set(failed.map((r) => r.id)))
-      if (failed.length > 0) {
-        setError(`${failed.length} 个任务删除失败：${failed[0].error}`)
-      } else {
-        setError('')
-      }
-      // 当前页被清空时回到上一页
-      const remaining = tasks.filter((t) => !ids.includes(t.id)).length
-      if (failed.length === 0 && remaining === 0 && page > 1) setPage((p) => p - 1)
-      else loadAll()
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-
-  const loadTaskLogs = async (id: number) => {
-    try {
-      const data = await fetchJson<{ lines: string[] }>(`/api/tasks/${id}/log`)
-      setTaskLogs(data.lines.slice(-200))
-      setLogsOpen(true)
-    } catch {
-      setError('读取日志失败')
-    }
-  }
-
-  const openTask = async (task: TaskRow) => {
-    setSelectedTask(task)
-    setResultsLoading(true)
-    setResults([])
-    try {
-      const data = await fetch(`/api/tasks/${task.id}/results`).then((r) => r.json())
-      setResults(data as CheckResult[])
-    } finally {
-      setResultsLoading(false)
-    }
-  }
-
-  /** 静默刷新当前任务结果：不清空列表，避免页面高度抖动导致滚动跳顶 */
-  const reloadResults = async () => {
-    if (!selectedTask) return
-    try {
-      const data = await fetch(`/api/tasks/${selectedTask.id}/results`).then((r) => r.json())
-      setResults(data as CheckResult[])
-    } catch {
-      // 刷新失败保留现有数据
-    }
-  }
-
-  /** 批量保存所有已修改的交付成果 */
-  const saveAllDeliverables = async () => {
-    const ids = Object.keys(deliverableDrafts)
-    if (ids.length === 0 || !selectedTask) return
-    setSavingDeliverables(true)
-    try {
-      for (const id of ids) {
-        const resultId = Number(id)
-        await fetch(`/api/tasks/${selectedTask.id}/results/${resultId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deliverable: deliverableDrafts[resultId] ?? '' })
-        })
-      }
-      setDeliverableDrafts({})
-      await reloadResults()
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setSavingDeliverables(false)
-    }
-  }
-  const hasDeliverableDrafts = Object.keys(deliverableDrafts).length > 0
-
-  const updateStatus = async (resultId: number, status: string) => {
-    if (!selectedTask) return
-    await fetch(`/api/tasks/${selectedTask.id}/results/${resultId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
-    })
-    await reloadResults()
-    loadAll()
-  }
-
-  const openShotPicker = (strategy: 'mobile' | 'desktop') => {
-    shotStrategyRef.current = strategy
-    shotFileRef.current?.click()
-  }
-
-  const replaceShot = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file || !selectedTask) return
-    const strategy = shotStrategyRef.current
-    setShotUploading(strategy)
-    try {
-      const body = new FormData()
-      body.append('strategy', strategy)
-      body.append('file', file)
-      const res = await fetch(`/api/tasks/${selectedTask.id}/pagespeed-shot`, { method: 'POST', body })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? '上传失败')
-      // 截图已覆盖写入，自增版本号让图片 URL 带新参数，绕过浏览器强缓存
-      setShotVersion((v) => v + 1)
-      await loadAll()
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setShotUploading('')
-    }
-  }
-
-  const reportUrl = selectedTask ? `/reports/${selectedTask.id}` : ''
-  const filteredResults = results.filter((r) => statusFilter === 'all' || r.status === statusFilter)
-  const pageGroups = groupResultsByPage(filteredResults)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-
-  const selectableTaskIds = tasks.filter((t) => t.status !== 'running').map((t) => t.id)
-  const allSelectableSelected = selectableTaskIds.length > 0 && selectableTaskIds.every((id) => selectedTasks.has(id))
-  const someSelectableSelected = selectableTaskIds.some((id) => selectedTasks.has(id))
-
-  React.useEffect(() => {
-    if (selectAllRef.current) {
-      selectAllRef.current.indeterminate = someSelectableSelected && !allSelectableSelected
-    }
-  }, [someSelectableSelected, allSelectableSelected])
-
-  // 翻页或刷新后，剔除已不在当前页的选中项
-  React.useEffect(() => {
-    setSelectedTasks((prev) => {
-      if (prev.size === 0) return prev
-      const valid = new Set(tasks.map((t) => t.id))
-      const next = new Set([...prev].filter((id) => valid.has(id)))
-      return next.size === prev.size ? prev : next
-    })
-  }, [tasks])
-
-  const toggleTask = (id: number) => {
-    setSelectedTasks((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const toggleAllTasks = () => {
-    setSelectedTasks(allSelectableSelected ? new Set() : new Set(selectableTaskIds))
-  }
+  const canStart = sites.length > 0 && ruleSets.length > 0
 
   return (
-    <div className="space-y-6">
-      {/* 页头 */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">检测与历史</h1>
-          <p className="mt-0.5 text-sm text-foreground-muted">选择站点与分组，一键开展合规性检测；后台真实浏览器执行。</p>
-        </div>
-        <div className="flex gap-2">
-          {selectedTasks.size > 0 && (
-            <Button variant="danger" size="sm" onClick={deleteSelected} disabled={deleting}>
-              {deleting ? <Spinner /> : <Trash2 className="h-3.5 w-3.5" />} 删除选中（{selectedTasks.size}）
+    <div className="space-y-7">
+      <PageHeader
+        title="检测"
+        description="选择站点与规则分组，使用真实浏览器执行检测。"
+        actions={
+          <>
+            <Button variant="ghost" size="sm" onClick={load} aria-label="刷新">
+              <RefreshCw className="h-4 w-4" />
             </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={loadAll}>
-            <RefreshCw className="h-3.5 w-3.5" /> 刷新
-          </Button>
-          <Button onClick={openStart} disabled={sites.length === 0 || ruleSets.length === 0}>
-            <Play className="h-4 w-4" /> 开始检测
-          </Button>
-        </div>
-      </div>
+            <Button onClick={openStart} disabled={!canStart}>
+              <Play className="h-4 w-4" /> 开始检测
+            </Button>
+          </>
+        }
+      />
 
-      {error && (
-        <div className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>
-      )}
+      {error && <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>}
 
-      {runningCount > 0 && (
-        <div className="flex items-center gap-2.5 rounded-md bg-primary-soft px-4 py-2.5 text-sm text-primary-soft-foreground">
-          <Spinner /> {runningCount} 个任务正在后台运行…
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
-      ) : tasks.length === 0 ? (
-        <Empty
-          icon={<ShieldCheck className="h-8 w-8" />}
-          title="还没有检测任务"
-          description="先在「站点管理」添加站点，然后点击右上角「开始检测」。"
-        />
-      ) : (
-        <Card className="overflow-hidden">
-          <div className="flex items-center justify-between border-b border-border px-5 py-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <BarChart3 className="h-4 w-4 text-primary" /> 任务列表
-            </div>
-            <span className="text-xs text-foreground-subtle">共 {total} 个</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border/60 bg-white/40 text-xs text-foreground-muted backdrop-blur-sm dark:bg-white/[0.04]">
-                  <th className="w-10 px-4 py-3">
-                    <input
-                      ref={selectAllRef}
-                      type="checkbox"
-                      className="accent-blue-600 disabled:opacity-40"
-                      checked={allSelectableSelected}
-                      onChange={toggleAllTasks}
-                      disabled={selectableTaskIds.length === 0}
-                      aria-label="全选当前页可删除任务"
-                      title="全选当前页可删除任务（运行中的任务不可删除）"
-                    />
-                  </th>
-                  <th className="px-4 py-3 font-medium">ID</th>
-                  <th className="px-4 py-3 font-medium">站点</th>
-                  <th className="px-4 py-3 font-medium">分组</th>
-                  <th className="px-4 py-3 font-medium">状态</th>
-                  <th className="px-4 py-3 font-medium">通过/失败</th>
-                  <th className="px-4 py-3 font-medium">时间</th>
-                  <th className="px-4 py-3 text-right font-medium">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((t) => (
-                  <tr
-                    key={t.id}
-                    onClick={() => openTask(t)}
-                    className="cursor-pointer border-b border-border/60 transition-colors hover:bg-white/55 dark:hover:bg-white/[0.05]"
-                  >
-                    <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        className="accent-blue-600 disabled:opacity-40"
-                        checked={selectedTasks.has(t.id)}
-                        onChange={() => toggleTask(t.id)}
-                        disabled={t.status === 'running'}
-                        aria-label={`选择任务 #${t.id}`}
-                        title={t.status === 'running' ? '运行中的任务不可删除' : undefined}
-                      />
-                    </td>
-                    <td className="px-4 py-3.5 font-mono text-xs text-foreground-subtle">#{t.id}</td>
-                    <td className="px-4 py-3.5">
-                      <div className="font-medium">{t.site?.name ?? `站点#${t.siteId}`}</div>
-                      <div className="max-w-[200px] truncate text-xs text-foreground-subtle">{displayUrl(t.site?.url ?? '')}</div>
-                    </td>
-                    <td className="px-4 py-3.5 text-foreground-muted">{t.ruleSet?.name ?? `分组#${t.ruleSetId}`}</td>
-                    <td className="px-4 py-3.5">
-                      {t.status === 'running' && t.progress ? (
-                        <div className="space-y-1.5">
-                          <StatusBadge status={t.status} />
-                          {t.progress.queued ? (
-                            <div className="text-[11px] text-foreground-subtle">排队中，等待空闲任务位…</div>
-                          ) : (
-                            <>
-                              <div className="text-[11px] text-foreground-subtle">
-                                {t.progress.phaseName ? t.progress.phaseName + ' ' : ''}
-                                {t.progress.done}/{t.progress.total}
-                                {t.progress.ruleName ? ' · ' + t.progress.ruleName : ''}
-                              </div>
-                              <div className="h-1.5 w-28 overflow-hidden rounded-full bg-white/60 shadow-inner dark:bg-white/10">
-                                <div
-                                  className="h-full rounded-full bg-primary transition-all duration-500"
-                                  style={{ width: `${Math.round((t.progress.done / Math.max(t.progress.total, 1)) * 100)}%` }}
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        <StatusBadge status={t.status} />
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5 text-xs">
-                      <span className="font-medium text-success">{t.passCount}</span>
-                      <span className="mx-1 text-foreground-subtle">/</span>
-                      <span className="font-medium text-danger">{t.failCount}</span>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-foreground-subtle">{fmtTime(t.startedAt)}</td>
-                    <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        {t.status === 'running' && (
-                          <Button variant="ghost" size="sm" onClick={() => cancelTask(t.id)} disabled={cancelling === t.id}>
-                            {cancelling === t.id ? <Spinner /> : <X className="h-3.5 w-3.5" />}
-                          </Button>
-                        )}
-                        {t.status !== 'running' && (
-                          <Button variant="ghost" size="sm" onClick={() => deleteTask(t.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
-            <span className="text-xs text-foreground-subtle">
-              第 {page}/{totalPages} 页 · 共 {total} 个任务
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-foreground-subtle">每页</span>
-              <Select
-                value={String(pageSize)}
-                onChange={(v) => {
-                  setPageSize(Number(v))
-                  setPage(1)
-                }}
-                options={PAGE_SIZE_OPTIONS.map((n) => ({ value: String(n), label: String(n) }))}
-                className="h-8 w-[72px] text-xs"
-              />
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                <ChevronLeft className="h-3.5 w-3.5" /> 上一页
-              </Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                下一页 <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
+      {!canStart && (
+        <Card className="px-4 py-3 text-sm text-foreground-muted">
+          需要至少一个站点和一套规则。
+          {sites.length === 0 && <Link href="/sites" className="ml-2 font-medium text-primary hover:underline">添加站点</Link>}
+          {ruleSets.length === 0 && <Link href="/rules" className="ml-2 font-medium text-primary hover:underline">配置规则</Link>}
         </Card>
       )}
 
-      {/* 开始检测对话框 */}
+      {running > 0 && (
+        <div className="flex items-center gap-2 text-sm text-foreground-muted">
+          <Spinner className="h-3.5 w-3.5" /> {running} 个检测正在运行
+        </div>
+      )}
+
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-3">
+          <h2 className="text-sm font-semibold">检测记录</h2>
+          <span className="text-xs text-foreground-subtle">共 {total} 次</span>
+        </div>
+
+        {loading ? (
+          <Card className="flex justify-center py-16"><Spinner /></Card>
+        ) : tasks.length === 0 ? (
+          <Empty
+            icon={<ShieldCheck className="h-7 w-7" />}
+            title="还没有检测记录"
+            description={canStart ? '点击「开始检测」选择站点和规则。' : '先添加站点并配置规则。'}
+          />
+        ) : (
+          <Card className="divide-y divide-border overflow-hidden">
+            {tasks.map((task) => {
+              const progress = task.progress && !task.progress.queued
+                ? Math.round((task.progress.done / Math.max(task.progress.total, 1)) * 100)
+                : 0
+              return (
+                <div key={task.id} className="group grid gap-3 px-4 py-3.5 transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <Link href={`/runs/${task.id}`} className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate font-medium">{task.site?.name ?? `站点 #${task.siteId}`}</span>
+                      <StatusBadge status={task.status} />
+                      <span className="text-xs text-foreground-subtle">{task.ruleSet?.name ?? `规则 #${task.ruleSetId}`}</span>
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-foreground-subtle">{displayUrl(task.site?.url ?? '')}</div>
+                    {task.status === 'running' && task.progress && (
+                      <div className="mt-2 flex max-w-md items-center gap-2">
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">
+                          <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${progress}%` }} />
+                        </div>
+                        <span className="shrink-0 text-[11px] tabular-nums text-foreground-subtle">
+                          {task.progress.queued ? '排队中' : `${task.progress.done}/${task.progress.total}`}
+                        </span>
+                      </div>
+                    )}
+                  </Link>
+                  <div className="flex items-center justify-between gap-4 sm:justify-end">
+                    <div className="text-xs text-foreground-muted">
+                      {task.status === 'success' || task.status === 'failed' || task.status === 'stopped' ? (
+                        <>
+                          <span className="text-success">{task.passCount}</span>
+                          <span className="mx-1 text-border-strong">/</span>
+                          <span className="text-danger">{task.failCount}</span>
+                        </>
+                      ) : (
+                        <span className="text-foreground-subtle">—</span>
+                      )}
+                      <span className="ml-3 tabular-nums text-foreground-subtle">{fmtTime(task.startedAt)}</span>
+                    </div>
+                    {task.status !== 'running' && (
+                      <button
+                        type="button"
+                        onClick={() => deleteTask(task)}
+                        aria-label={`删除 ${task.site?.name ?? `任务 #${task.id}`}`}
+                        className="rounded p-1.5 text-foreground-subtle opacity-0 transition-opacity hover:bg-danger-soft hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </Card>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <span className="text-xs text-foreground-subtle">第 {page} / {totalPages} 页</span>
+            <div className="flex items-center gap-2">
+              <Select
+                value={String(pageSize)}
+                onChange={(value) => { setPageSize(Number(value)); setPage(1) }}
+                options={[10, 20, 50].map((n) => ({ value: String(n), label: `${n} / 页` }))}
+                className="h-8 text-xs"
+              />
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 1} aria-label="上一页">
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages} aria-label="下一页">
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </section>
+
       <Dialog
         open={startOpen}
         onClose={() => setStartOpen(false)}
@@ -537,300 +255,33 @@ export default function RunsPage() {
           <>
             <Button variant="outline" onClick={() => setStartOpen(false)}>取消</Button>
             <Button onClick={startRun} disabled={starting || !siteId || !ruleSetId}>
-              {starting && <Spinner />} 开始
+              {starting && <Spinner />} 开始检测
             </Button>
           </>
         }
       >
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">检测站点</label>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">站点</span>
             <Select
               value={siteId}
               onChange={setSiteId}
-              options={sites.map((s) => ({ value: String(s.id), label: `${s.name}（${displayUrl(s.url)}）` }))}
+              options={sites.map((site) => ({ value: String(site.id), label: `${site.name} — ${displayUrl(site.url)}` }))}
               className="w-full"
             />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">分组</label>
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">规则分组</span>
             <Select
               value={ruleSetId}
               onChange={setRuleSetId}
-              options={ruleSets.map((rs) => ({ value: String(rs.id), label: `${rs.name}（${rs.ruleCount ?? 0} 条规则）` }))}
+              options={ruleSets.map((set) => ({ value: String(set.id), label: `${set.name}（${set.ruleCount ?? 0} 条）` }))}
               className="w-full"
             />
-          </div>
-          <p className="flex items-center gap-1.5 text-xs text-foreground-subtle">
-            <Clock className="h-3.5 w-3.5" /> 检测在服务器后台执行，使用真实浏览器渲染；耗时约 30 秒~2 分钟。
-          </p>
-        </div>
-      </Dialog>
-
-      {/* 任务详情弹窗 */}
-      <input
-        ref={shotFileRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
-        className="hidden"
-        onChange={replaceShot}
-      />
-      {selectedTask && (
-        <Dialog
-          open
-          onClose={() => setSelectedTask(null)}
-          title={`任务 #${selectedTask.id}${selectedTask.site?.name ? ' · ' + selectedTask.site.name : ''}`}
-          width="max-w-4xl"
-          actions={
-            <>
-              {selectedTask.status === 'success' && (
-                <Link href={reportUrl} target="_blank">
-                  <Button variant="outline" size="sm">
-                    <FileText className="h-3.5 w-3.5" /> 查看报告
-                  </Button>
-                </Link>
-              )}
-              {selectedTask.status === 'running' && (
-                <Button variant="outline" size="sm" onClick={() => cancelTask(selectedTask.id)} disabled={cancelling === selectedTask.id}>
-                  {cancelling === selectedTask.id ? <Spinner /> : <X className="h-3.5 w-3.5" />} 终止任务
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => loadTaskLogs(selectedTask.id)}>
-                <ScrollText className="h-3.5 w-3.5" /> 查看日志
-              </Button>
-              {hasDeliverableDrafts && (
-                <Button size="sm" onClick={() => saveAllDeliverables()} disabled={savingDeliverables}>
-                  {savingDeliverables && <Spinner />} 保存修改
-                </Button>
-              )}
-            </>
-          }
-        >
-          <div className="flex flex-wrap items-center gap-2 pb-2 text-xs text-foreground-subtle">
-            <StatusBadge status={selectedTask.status} />
-            <span className="text-foreground-muted">{displayUrl(selectedTask.site?.url ?? '')}</span>
-            <span>·</span>
-            <span>{selectedTask.ruleSet?.name}</span>
-          </div>
-          <div className="mb-4 h-px bg-border" />
-
-          {selectedTask.pageSet && selectedTask.pageSet.representatives.length > 0 && (
-            <div className="glass mb-5 rounded-2xl p-4">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">检测页面</span>
-                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-foreground-muted dark:bg-zinc-800">
-                  {selectedTask.pageSet.representatives.length} 个代表页
-                </span>
-                <span className="text-xs text-foreground-subtle">
-                  模板去重自 {selectedTask.pageSet.candidateCount} 个候选 URL
-                  {typeof selectedTask.pageSet.locTotal === "number" && (
-                    <span className="ml-1">· sitemap 共 {selectedTask.pageSet.locTotal} 个 URL</span>
-                  )}
-                </span>
-              </div>
-              {selectedTask.pageSet.sitemaps.length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-1.5 text-xs">
-                  {selectedTask.pageSet.sitemaps.map((sm) => (
-                    <span key={sm} className="inline-flex max-w-full items-center gap-1 truncate rounded-md bg-zinc-100 px-2 py-1 font-mono text-[11px] text-foreground-muted dark:bg-zinc-800">
-                      <FileText className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{displayUrl(sm)}</span>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <ul className="space-y-1">
-                {selectedTask.pageSet.representatives.map((p) => (
-                  <li key={p.url} className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="min-w-0 flex-1 truncate font-mono text-foreground-muted">{displayUrl(p.url)}</span>
-                    <span className="max-w-[45%] truncate rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-foreground-subtle dark:bg-zinc-800">
-                      {p.templateSignature || '—'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div>
-            {/* 概览条 */}
-            {!resultsLoading && results.length > 0 && (
-              <div className="glass mb-5 flex flex-wrap items-center gap-6 rounded-2xl p-4">
-                <div className="grid flex-1 grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
-                  <div>
-                    <div className="text-xs text-foreground-subtle">通过</div>
-                    <div className="text-lg font-bold text-success">{statusCounts(results, 'pass')}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-foreground-subtle">失败</div>
-                    <div className="text-lg font-bold text-danger">{statusCounts(results, 'fail')}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-foreground-subtle">跳过</div>
-                    <div className="text-lg font-bold text-foreground-muted">{statusCounts(results, 'skip')}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-foreground-subtle">待验收</div>
-                    <div className="text-lg font-bold text-primary">{statusCounts(results, 'verify')}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {resultsLoading ? (
-              <div className="flex justify-center py-8"><Spinner /></div>
-            ) : results.length === 0 ? (
-              <div className="py-8 text-center text-sm">
-                {selectedTask.status === 'failed' ? (
-                  <div className="mx-auto max-w-lg">
-                    <div className="mb-1.5 font-medium text-danger">检测失败</div>
-                    <div className="break-all rounded-md bg-danger-soft px-4 py-2.5 text-left text-xs text-danger-soft-foreground">
-                      {selectedTask.error || '未知错误（可能是浏览器环境问题，请检查服务器 Chromium 是否已安装）'}
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-foreground-subtle">该任务暂无检测结果（可能页面加载失败或未完成）</span>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  {STATUS_FILTERS.map(({ key: fkey, label }) => (
-                    <button
-                      key={fkey}
-                      onClick={() => setStatusFilter(fkey)}
-                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                        statusFilter === fkey
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'bg-zinc-100 text-foreground-muted hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700'
-                      }`}
-                    >
-                      {label}
-                      <span className="ml-1 opacity-70">{statusCounts(results, fkey)}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* PageSpeed 截图（支持替换）：仅建站服务合同验收等含 PageSpeed 规则的任务展示 */}
-                {selectedTask.pagespeed && (
-                <div className="mb-4 grid gap-3 lg:grid-cols-2">
-                  {(['mobile', 'desktop'] as const).map((strategy) => (
-                    <div
-                      key={strategy}
-                      className="overflow-hidden rounded-xl border border-border/60 bg-white/55 shadow-sm shadow-black/[0.04] transition-shadow hover:shadow-md dark:bg-white/[0.05]"
-                    >
-                      <div className="flex items-center gap-3 border-b border-border/60 bg-white/40 px-4 py-2.5 dark:bg-white/[0.04]">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-soft text-primary">
-                          {strategy === 'mobile' ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
-                        </span>
-                        <span className="text-sm font-medium">PageSpeed {strategy === 'mobile' ? '移动端' : '桌面端'} 截图</span>
-                        <span className="ml-auto flex items-center gap-2">
-                          <button
-                            className="inline-flex items-center gap-1 text-xs font-medium text-foreground-muted hover:text-foreground"
-                            onClick={() => openShotPicker(strategy)}
-                            disabled={shotUploading !== ''}
-                          >
-                            <ImageUp className="h-3.5 w-3.5" />
-                            {shotUploading === strategy ? '上传中…' : '替换截图'}
-                          </button>
-                        </span>
-                      </div>
-                      <div className="p-3">
-                        <img
-                          src={psShotUrl(selectedTask?.id ?? null, strategy, shotVersion)}
-                          alt={`PageSpeed ${strategy === 'mobile' ? '移动端' : '桌面端'} 截图`}
-                          className="max-h-64 w-full cursor-zoom-in rounded-md border border-border object-contain"
-                          onClick={() => window.open(psShotUrl(selectedTask?.id ?? null, strategy, shotVersion), '_blank')}
-                          onError={(e) => {
-                            ;(e.target as HTMLImageElement).style.display = 'none'
-                          }}
-                          loading="lazy"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                )}
-
-                {Array.from(pageGroups.entries()).map(([purl, items]) => (
-                  <div key={purl || '__home__'} className="mb-4">
-                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-medium text-foreground">{pageLabel(purl, { max: 64 })}</span>
-                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-foreground-muted dark:bg-zinc-800">{items.length} 项</span>
-                      {purl && <span className="truncate text-foreground-subtle">{displayUrl(purl)}</span>}
-                    </div>
-                    <div className="grid gap-3 lg:grid-cols-2">
-                      {items.map((r) => (
-                    <div key={r.id} className="glass rounded-xl p-4 transition-shadow hover:shadow-md">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <StatusBadge status={r.status} />
-                            <span className="text-xs text-foreground-subtle">{r.groupName}</span>
-                            <Select
-                              value={r.status}
-                              onChange={(v) => updateStatus(r.id, v)}
-                              className="h-7 w-[104px] text-xs"
-                              options={[
-                                { value: 'pass', label: '通过' },
-                                { value: 'fail', label: '失败' },
-                                { value: 'skip', label: '跳过' },
-                                { value: 'verify', label: '待验收' }
-                              ]}
-                            />
-                          </div>
-                          <div className="mt-1.5 text-sm font-medium">{r.ruleName}</div>
-                        </div>
-                      </div>
-                      <dl className="mt-2.5 space-y-1 text-xs">
-                        <div className="flex gap-2">
-                          <dt className="w-12 shrink-0 text-foreground-subtle">实际值</dt>
-                          <dd className="min-w-0 break-all text-foreground-muted">{r.actualValue || '—'}</dd>
-                        </div>
-                        <div className="flex gap-2">
-                          <dt className="w-12 shrink-0 text-foreground-subtle">说明</dt>
-                          <dd className="min-w-0 break-all">{r.description}</dd>
-                        </div>
-                      </dl>
-                      {(r.deliverable || selectedTask.status === 'success') && (
-                        <div className="mt-3">
-                          <Input
-                            placeholder="自定义交付成果（留空则沿用预设文案）…"
-                            value={deliverableDrafts[r.id] ?? r.deliverable ?? ''}
-                            onChange={(e) => setDeliverableDrafts((d) => ({ ...d, [r.id]: e.target.value }))}
-                            className="h-8 w-full text-xs"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                </div>
-              ))}
-              </>
-            )}
-          </div>
-        </Dialog>
-      )}
-
-      {/* 任务日志弹窗 */}
-      <Dialog
-        open={logsOpen}
-        onClose={() => setLogsOpen(false)}
-        title={"任务日志" + (selectedTask ? ` #${selectedTask.id}` : '')}
-        width="max-w-2xl"
-        footer={<Button variant="outline" onClick={() => setLogsOpen(false)}>关闭</Button>}
-      >
-        <div className="max-h-[420px] space-y-1 overflow-y-auto rounded-md bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-100 dark:bg-black/60">
-          {taskLogs.length === 0 ? (
-            <div className="py-6 text-center text-zinc-400">暂无日志（任务可能尚未产生日志，或日志文件不存在）</div>
-          ) : (
-            taskLogs.map((line, idx) => (
-              <div key={idx} className="whitespace-pre-wrap break-all">{line}</div>
-            ))
-          )}
+          </label>
+          <p className="text-xs leading-5 text-foreground-subtle">检测在后台运行，完成后可查看结果并生成报告。通常需要 30 秒到 2 分钟。</p>
         </div>
       </Dialog>
     </div>
   )
 }
-

@@ -42,6 +42,32 @@ export interface RuleSetInput {
   scanPages?: boolean
 }
 
+/** 规则类型：check 自动检测 | deliverable 合同文案 | artifact 功能产物 */
+export type RuleKind = 'check' | 'deliverable' | 'artifact'
+
+/** 规则类型元数据（全站唯一来源：规则库、任务详情、报告共用同一套命名） */
+export const RULE_KINDS: ReadonlyArray<{
+  key: RuleKind
+  label: string
+  description: string
+}> = [
+  {
+    key: 'check',
+    label: '自动检测',
+    description: '由浏览器规则实际检查，计入通过 / 失败 / 跳过统计'
+  },
+  {
+    key: 'deliverable',
+    label: '合同文案',
+    description: '合同承诺或交付说明，不自动检测；需人工确认验收状态'
+  },
+  {
+    key: 'artifact',
+    label: '功能产物',
+    description: '截图、评分图等证据产物；单独留存，不参与通过率和报告合计'
+  }
+]
+
 /** 单条规则定义 */
 export interface Rule {
   id: number
@@ -55,6 +81,8 @@ export interface Rule {
   description?: string
   /** 执行范围：'site' 站点级（整站仅执行一次）| 'page' 页面级（每个代表页执行，默认） */
   scope?: 'page' | 'site'
+  /** 规则类型：自动检测 / 合同文案 / 功能产物（如截图） */
+  kind?: RuleKind
   params: Record<string, unknown>
   sortOrder: number
 }
@@ -78,7 +106,6 @@ export interface ElementorHiddenItem {
 
 /** 站点级规则附带的结构化数据（按 ruleKey 类型化；动态 ruleKey 通过索引签名兜底） */
 export interface SiteDataByRuleKey {
-  'perf.pagespeed.score'?: PageSpeedReportData
   'delivery.h1.count'?: { pages: { url: string; h1s: string[] }[] }
   'delivery.elementor.hidden-both'?: { pages: { url: string; items: ElementorHiddenItem[] }[] }
   'delivery.sitemap'?: unknown
@@ -120,8 +147,6 @@ export interface Task {
   error?: string | null
   site?: Site
   ruleSet?: RuleSet
-  /** PageSpeed 评分结果（任务执行时采集，可能为 null） */
-  pagespeed?: PageSpeedReportData | null
   /** 检测页面集合（sitemap 枚举 + 模板去重结果，多页面任务才有） */
   pageSet?: TaskPageSet | null
   /** 站点级规则的结构化数据（按 ruleKey 类型化；报告按页面表格使用） */
@@ -141,6 +166,8 @@ export interface CheckResult {
   ruleKey: string
   ruleName: string
   groupName: string
+  /** 结果类型：check 自动检测 | deliverable 合同文案 | artifact 功能产物 */
+  kind?: RuleKind
   /** 检测页面 URL（多页面任务按页面分组；旧单页任务为空） */
   pageUrl: string
   status: CheckStatus
@@ -167,39 +194,5 @@ export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
   logoPath: '/logo.svg',
   reportTitle: '网站合规性检测报告',
   footerText: '本报告由网站合规性检测工具自动生成'
-}
-
-/** PageSpeed 单个类别评分（0-100） */
-export interface PageSpeedCategoryScore {
-  id: string
-  title: string
-  score: number | null
-}
-
-/** PageSpeed 核心指标 */
-export interface PageSpeedMetricValue {
-  id: string
-  title: string
-  displayValue: string
-  score: number | null
-}
-
-/** 单一策略（移动端/桌面端）的 PageSpeed 结果 */
-export interface PageSpeedStrategyResult {
-  strategy: 'mobile' | 'desktop'
-  fetchedAt: string
-  ok: boolean
-  error?: string
-  categories: PageSpeedCategoryScore[]
-  metrics: PageSpeedMetricValue[]
-}
-
-/** 一个任务的整体 PageSpeed 数据 */
-export interface PageSpeedReportData {
-  fetchedAt: string
-  mobile: PageSpeedStrategyResult | null
-  desktop: PageSpeedStrategyResult | null
-  /** 整体失败说明（如 URL 无效） */
-  error?: string
 }
 

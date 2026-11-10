@@ -8,6 +8,7 @@ import { describeElementorItem } from '../engine/rules/delivery'
 import { displayUrl, pageLabel } from '../display'
 
 import type { CheckResult, ReportSettings, Site, RuleSet, Task, SiteDataByRuleKey } from '../types'
+import { isArtifactResult, isDeliverableResult, resultKind } from '../rule-kinds'
 
 /** 报告数据（含截图 dataURL） */
 export interface ReportData {
@@ -22,8 +23,6 @@ export interface ReportData {
   skipCount: number
   verifyCount: number
   settings: ReportSettings
-  /** PageSpeed 评分（任务可能没有，为 null） */
-  pagespeed: import('../types').PageSpeedReportData | null
   /** PageSpeed 页面截图（移动端/桌面端 dataURL） */
   pagespeedShots: { strategy: string; dataUrl: string | null }[]
   /** 检测页面集合（sitemap 枚举 + 模板去重结果） */
@@ -132,15 +131,6 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
   const site = (await getSite(rawTask.siteId))!
   const ruleSet = (await getRuleSet(rawTask.ruleSetId))!
 
-  const pagespeedRaw = rawTask.pagespeedJson ? JSON.parse(rawTask.pagespeedJson) as { fetchedAt?: string } : null
-  // 完成时间应包含 PageSpeed 采集耗时：取 max(任务收尾时间, PageSpeed 采集完成时间)
-  let finishedAt = rawTask.finishedAt
-  if (pagespeedRaw?.fetchedAt) {
-    const a = rawTask.finishedAt ? new Date(rawTask.finishedAt).getTime() : 0
-    const b = new Date(pagespeedRaw.fetchedAt).getTime()
-    if (!isNaN(b) && (b > a || a === 0)) finishedAt = pagespeedRaw.fetchedAt
-  }
-
   const task: Task = {
     id: rawTask.id,
     siteId: rawTask.siteId,
@@ -151,10 +141,9 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     failCount: rawTask.failCount,
     skipCount: rawTask.skipCount,
     startedAt: rawTask.startedAt,
-    finishedAt: finishedAt,
+    finishedAt: rawTask.finishedAt,
     site,
     ruleSet,
-    pagespeed: rawTask.pagespeedJson ? JSON.parse(rawTask.pagespeedJson) : null,
     pageSet: rawTask.pageSetJson ? JSON.parse(rawTask.pageSetJson) : null,
     siteData: rawTask.siteDataJson ? JSON.parse(rawTask.siteDataJson) : null
   }
@@ -168,6 +157,7 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
       ruleKey: r.ruleKey,
       ruleName: r.ruleName,
       groupName: r.groupName,
+      kind: r.kind,
       pageUrl: r.pageUrl,
       status: r.status,
       actualValue: r.actualValue,
@@ -181,11 +171,13 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     }))
   )
 
-  const passCount = results.filter((r) => r.status === 'pass').length
-  const warnCount = results.filter((r) => r.status === 'warn').length
-  const failCount = results.filter((r) => r.status === 'fail').length
-  const skipCount = results.filter((r) => r.status === 'skip').length
-  const verifyCount = results.filter((r) => r.status === 'verify').length
+  // 通过率只统计自动检测；合同文案独立人工验收；功能产物仅留存证据
+  const checkResults = results.filter((r) => resultKind(r) === 'check')
+  const passCount = checkResults.filter((r) => r.status === 'pass').length
+  const warnCount = checkResults.filter((r) => r.status === 'warn').length
+  const failCount = checkResults.filter((r) => r.status === 'fail').length
+  const skipCount = checkResults.filter((r) => r.status === 'skip').length
+  const verifyCount = results.filter((r) => resultKind(r) === 'deliverable' && r.status === 'verify').length
 
   return {
     task,
@@ -199,7 +191,6 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     skipCount,
     verifyCount,
     settings: await getReportSettings(),
-    pagespeed: task.pagespeed ?? null,
     pagespeedShots: await readPagespeedShots(taskId),
     pageSet: task.pageSet ?? null,
     siteData: task.siteData ?? null
@@ -252,15 +243,17 @@ export async function buildReportPdf(taskId: number): Promise<Buffer> {
 /** 生成报告 HTML —— 合同式表格版式（可打印为 PDF） */
 export async function buildReportHtml(data: ReportData): Promise<string> {
   const { site, results, generatedAt, settings, pagespeedShots, passCount, warnCount, failCount, skipCount, verifyCount } = data
+  const checkResultCount = results.filter((r) => resultKind(r) === 'check').length
   const task = data.task
   const CN = ['一','二','三','四','五','六','七','八','九','十']
   let sectionNo = 3
   const sectionTitle = (title: string) => { const no = sectionNo++; return `<h2 class="section-title">${CN[no - 1] ?? no}、${title}</h2>` }
   const logoDataUrl = settings.logoPath ? await resolveLogoDataUrl(settings.logoPath) : null
 
-  // 分区：自动检测结果进主检测明细表；verify.* 人工交付项单列「人工验收清单」
-  const autoResults = results.filter((r) => r.status !== 'verify')
-  const verifyResults = results.filter((r) => r.status === 'verify')
+  // 分区：自动检测结果进主检测明细表；合同文案单列「人工验收清单」；功能产物单独成节
+  const autoResults = results.filter((r) => resultKind(r) === 'check')
+  const verifyResults = results.filter((r) => isDeliverableResult(r))
+  const artifactResults = results.filter((r) => isArtifactResult(r))
 
   // 按分组聚合（保持检测顺序）
   const groups = new Map<string, (typeof data.results)[number][]>()
@@ -289,7 +282,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
             <td class="page-cell">${escapeHtml(pageLabel(r.pageUrl))}</td>
             <td class="desc-cell">${descHtml}${noteHtml}</td>
             <td class="deliver-cell">
-              <div class="cell-status">${r.actualValue && r.actualValue.startsWith('默认通过') ? '<span class="badge badge-default">未检测·默认通过</span>' : statusBadgeHtml(r.status)}</div>
+              <div class="cell-status">${r.status === 'verify' ? '<span class="badge badge-verify">待人工确认</span>' : statusBadgeHtml(r.status)}</div>
               ${r.deliverable && r.deliverable.trim() ? `<div class="cell-deliver"><span class="deliver-text">${safeReportText(r.deliverable)}</span></div>` : ''}
             </td>
           </tr>`
@@ -298,7 +291,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     )
     .join('')
 
-  // ── 人工验收清单：verify.* 为人工交付项，与自动检测分区，单独成表 ──
+  // ── 人工验收清单：合同文案与人工交付项单独成表 ──
   const verifyGroups = new Map<string, (typeof data.results)[number][]>()
   for (const r of verifyResults) {
     const arr = verifyGroups.get(r.groupName) ?? []
@@ -330,8 +323,8 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
       ? ''
       : `<div class="pageset-box">
       <div class="pageset-head">
-        <span class="badge badge-verify">待验收 ${verifyResults.length} 项</span>
-        <span class="pageset-hint">共 ${verifyResults.length} 项人工交付项，需验收人员确认后更新状态</span>
+        <span class="badge badge-verify">合同文案 ${verifyResults.length} 项</span>
+        <span class="pageset-hint">合同条款与交付说明不自动检测，需验收人员确认后更新状态</span>
       </div>
       <div class="pageset-table-wrap">
         <table class="contract-table accept-table">
@@ -348,6 +341,32 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
 
   // ── 截图（仅 PageSpeed 移动端/桌面端页面截图）──
   const shotItems = pagespeedShots.filter((s) => s.dataUrl)
+  // ── 功能产物清单：明确说明截图是否生成，与检测结论分开 ──
+  const artifactRows = artifactResults
+    .map((r) => `<tr>
+      <td class="item-cell"><div class="item-name">${escapeHtml(r.ruleName)}</div></td>
+      <td class="desc-cell">${safeReportText(r.actualValue || r.description)}</td>
+      <td class="accept-cell">${statusBadgeHtml(r.status)}</td>
+    </tr>`)
+    .join('')
+  const artifactSection = artifactResults.length === 0
+    ? ''
+    : `<div class="pageset-box">
+      <div class="pageset-head">
+        <span class="badge badge-pass">功能产物 ${artifactResults.length} 项</span>
+        <span class="pageset-hint">仅留存证据，不计入检测合计与通过率</span>
+      </div>
+      <div class="pageset-table-wrap">
+        <table class="contract-table accept-table">
+          <thead><tr>
+            <th style="width:30%">产物</th>
+            <th style="width:56%">说明</th>
+            <th style="width:14%">状态</th>
+          </tr></thead>
+          <tbody>${artifactRows}</tbody>
+        </table>
+      </div>
+    </div>`
   const screenshotSection =
     shotItems.length === 0
       ? ''
@@ -528,7 +547,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .deliver-cell .deliver-text { display: inline-block; text-align: left; font-size: 12px; line-height: 1.6; color: #334155; word-break: break-word; }
   .deliver-cell .cell-status { margin-bottom: 4px; }
   .deliver-cell .cell-deliver { text-align: left; }
-  .badge-default { color: #92400e; border-color: #fcd34d; background: #fffbeb; }
   .stale-box { border-color: #fde68a; background: #fffbeb; }
   .stale-box .pageset-hint { color: #92400e; }
   .accept-table td.accept-cell { text-align: center; vertical-align: middle; }
@@ -574,7 +592,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   </div>
 
   <div class="stat-grid">
-    <div class="stat stat-total"><div class="stat-num">${results.length}</div><div class="stat-label">合计</div></div>
+    <div class="stat stat-total"><div class="stat-num">${checkResultCount}</div><div class="stat-label">检测合计</div></div>
     <div class="stat stat-pass"><div class="stat-num">${passCount}</div><div class="stat-label">通过</div></div>
     <div class="stat stat-warn"><div class="stat-num">${warnCount}</div><div class="stat-label">警告</div></div>
     <div class="stat stat-fail"><div class="stat-num">${failCount}</div><div class="stat-label">失败</div></div>
@@ -608,13 +626,15 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     <tbody>${mainRows}</tbody>
   </table>
 
-  ${verifySection ? `${sectionTitle('人工验收清单')}${verifySection}` : ''}
+  ${verifySection ? `${sectionTitle('合同文案与人工验收')}${verifySection}` : ''}
 
   ${deliveryMatrix ? `${sectionTitle('交付检查明细（按页面）')}${deliveryMatrix}` : deliveryStaleHint}
 
   ${pageSetSection ? `${sectionTitle('检测页面')}${pageSetSection}` : ''}
 
-  ${screenshotSection ? `${sectionTitle('PageSpeed 评分截图')}${screenshotSection}` : ''}
+  ${artifactSection ? `${sectionTitle('功能产物')}${artifactSection}` : ''}
+
+  ${screenshotSection ? `${sectionTitle('PageSpeed 截图')}${screenshotSection}` : ''}
 
   <div class="footer">${escapeHtml(settings.footerText)}</div>
 

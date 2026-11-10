@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, existsSync, readdirSync } from 'fs'
+import { mkdirSync, readFileSync, existsSync, readdirSync, renameSync } from 'fs'
 import { join } from 'path'
 import { DatabaseSync } from 'node:sqlite'
 import { DELIVERABLE_PRESETS } from './seed'
@@ -6,8 +6,32 @@ import { DELIVERABLE_PRESETS } from './seed'
 /** 数据文件存储根目录（本地 web-report-data） */
 export const DATA_DIR = process.env.WEBREPORT_DATA_DIR ?? join(process.cwd(), 'web-report-data')
 
-/** SQLite 数据库文件（首次启动自动从旧 JSON 迁移） */
-const DB_FILE = join(DATA_DIR, 'realsite.db')
+/** SQLite 数据库文件（首次启动自动从旧版数据库/JSON 迁移） */
+const DB_FILE = join(DATA_DIR, 'reports.db')
+
+/** 把旧版 realsite.db 迁移为 reports.db，保留已有数据 */
+function migrateLegacyDbFile(): void {
+  const legacyFile = join(DATA_DIR, 'realsite.db')
+  if (!existsSync(legacyFile) || existsSync(DB_FILE)) return
+
+  try {
+    // 先将 WAL 内容合并回主数据库，再改名，避免丢失尚未落盘的数据。
+    const legacyDb = new DatabaseSync(legacyFile)
+    try {
+      legacyDb.exec('PRAGMA wal_checkpoint(TRUNCATE);')
+    } finally {
+      legacyDb.close()
+    }
+    renameSync(legacyFile, DB_FILE)
+    for (const suffix of ['-wal', '-shm']) {
+      const sidecar = legacyFile + suffix
+      if (existsSync(sidecar)) renameSync(sidecar, DB_FILE + suffix)
+    }
+    console.info('[db] 已将 realsite.db 迁移为 reports.db')
+  } catch (err) {
+    console.warn('[db] 旧数据库迁移失败，将继续使用 reports.db：', err)
+  }
+}
 
 /** SQLite 查询返回的行类型（列名 -> 值） */
 export type SqlRow = Record<string, unknown>
@@ -17,6 +41,7 @@ let db: DatabaseSync | null = null
 export function getDb(): DatabaseSync {
   if (!db) {
     mkdirSync(DATA_DIR, { recursive: true })
+    migrateLegacyDbFile()
     db = new DatabaseSync(DB_FILE)
     db.exec(`
       PRAGMA journal_mode = WAL;
@@ -52,6 +77,7 @@ export function getDb(): DatabaseSync {
         description TEXT,
         deliverable TEXT,
         scope TEXT NOT NULL DEFAULT 'page',
+        kind TEXT NOT NULL DEFAULT 'check',
         params TEXT NOT NULL DEFAULT '{}',
         sortOrder INTEGER NOT NULL DEFAULT 0
       );
@@ -80,6 +106,7 @@ export function getDb(): DatabaseSync {
         ruleKey TEXT NOT NULL,
         ruleName TEXT NOT NULL,
         groupName TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'check',
         pageUrl TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL,
         actualValue TEXT NOT NULL DEFAULT '',
@@ -106,11 +133,44 @@ export function getDb(): DatabaseSync {
     `)
     ensureCompatColumns(db)
     migrateFromJson(db)
+    migratePagespeedScoreToShots(db)
+    removeDefaultPassBypass(db)
     migrateLogsFromFiles(db)
     // PSI API Key 配置已下线：清理历史遗留密钥
     db.prepare("DELETE FROM settings WHERE key = 'report.psiApiKey'").run()
   }
   return db
+}
+
+/**
+ * 清理旧的「默认通过」参数：自动检测项应真实执行，合同文案应人工验收。
+ * 该旁路已从引擎和界面移除，这里幂等删除历史参数，避免配置残留造成误解。
+ */
+function removeDefaultPassBypass(sqlite: DatabaseSync): void {
+  const rows = sqlite
+    .prepare("SELECT id, params FROM rules WHERE params LIKE '%defaultPass%'")
+    .all() as SqlRow[]
+  if (rows.length === 0) return
+
+  const update = sqlite.prepare('UPDATE rules SET params = ? WHERE id = ?')
+  sqlite.exec('BEGIN')
+  try {
+    for (const row of rows) {
+      let params: Record<string, unknown> = {}
+      try {
+        params = JSON.parse(str(row.params) || '{}') as Record<string, unknown>
+      } catch {
+        continue
+      }
+      if (!('defaultPass' in params)) continue
+      delete params.defaultPass
+      update.run(JSON.stringify(params), num(row.id))
+    }
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    console.warn('[store] 清理默认通过参数失败：', err)
+  }
 }
 
 // ── 首次启动：把旧版 logs/*.log 文件导入数据库（幂等；原文件保留为备份）──
@@ -235,6 +295,10 @@ function ensureCompatColumns(sqlite: DatabaseSync): void {
   if (!cols('rules').includes('scope')) {
     sqlite.exec("ALTER TABLE rules ADD COLUMN scope TEXT NOT NULL DEFAULT 'page'")
   }
+  const addRuleKind = !cols('rules').includes('kind')
+  if (addRuleKind) {
+    sqlite.exec("ALTER TABLE rules ADD COLUMN kind TEXT NOT NULL DEFAULT 'check'")
+  }
   // 新增：规则集多页面开关 / 结果按页面分组（幂等）
   if (!cols('rule_sets').includes('scanPages')) {
     sqlite.exec('ALTER TABLE rule_sets ADD COLUMN scanPages INTEGER NOT NULL DEFAULT 0')
@@ -242,11 +306,24 @@ function ensureCompatColumns(sqlite: DatabaseSync): void {
   if (!cols('check_results').includes('pageUrl')) {
     sqlite.exec("ALTER TABLE check_results ADD COLUMN pageUrl TEXT NOT NULL DEFAULT ''")
   }
+  const addResultKind = !cols('check_results').includes('kind')
+  if (addResultKind) {
+    sqlite.exec("ALTER TABLE check_results ADD COLUMN kind TEXT NOT NULL DEFAULT 'check'")
+  }
+  // 仅在首次补列时按旧数据分类；之后一律以 kind 字段为准，避免覆盖用户手动修改。
+  if (addResultKind) {
+    sqlite.prepare("UPDATE check_results SET kind = 'deliverable' WHERE status = 'verify'").run()
+    sqlite.prepare("UPDATE check_results SET kind = 'artifact' WHERE ruleKey LIKE 'artifact.%'").run()
+  }
   if (!cols('tasks').includes('pageSetJson')) {
     sqlite.exec('ALTER TABLE tasks ADD COLUMN pageSetJson TEXT')
   }
   if (!cols('tasks').includes('siteDataJson')) {
     sqlite.exec('ALTER TABLE tasks ADD COLUMN siteDataJson TEXT')
+  }
+  // 仅在首次补列时导入旧分类；verify.* 是合同文案，不是自动检测项。
+  if (addRuleKind) {
+    sqlite.prepare("UPDATE rules SET kind = 'deliverable' WHERE ruleKey LIKE 'verify.%'").run()
   }
   // 旧库补预设：规则行无 deliverable 时用预设文案回填
   const preset = sqlite.prepare("SELECT ruleKey FROM rules WHERE deliverable IS NULL OR trim(deliverable) = ''").all() as SqlRow[]
@@ -266,6 +343,58 @@ function ensureCompatColumns(sqlite: DatabaseSync): void {
   }
 }
 
+/**
+ * PageSpeed 评分已下线：曾勾选评分的分组改为「PageSpeed 得分截图」，
+ * 随后删除评分规则。用 settings 标记保证只执行一次。
+ */
+function migratePagespeedScoreToShots(sqlite: DatabaseSync): void {
+  const marker = 'migration.pagespeedShots.v2'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+  const alreadyMigrated = sqlite
+    .prepare('SELECT value FROM settings WHERE key = ?')
+    .get('migration.artifactRules.v1') as SqlRow | undefined
+
+  const targets = alreadyMigrated
+    ? []
+    : (sqlite
+        .prepare(
+          `SELECT r.ruleSetId, r.groupName
+           FROM rules r
+           WHERE r.ruleKey = 'perf.pagespeed.score'
+             AND NOT EXISTS (
+               SELECT 1 FROM rules a WHERE a.ruleSetId = r.ruleSetId AND a.ruleKey = 'artifact.pagespeed.shots'
+             )`
+        )
+        .all() as SqlRow[])
+
+  const insert = sqlite.prepare(
+    `INSERT INTO rules (ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, scope, kind, params, sortOrder)
+     VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
+  )
+  const nextSort = sqlite.prepare('SELECT COALESCE(MAX(sortOrder), 0) + 1 AS n FROM rules WHERE ruleSetId = ?')
+  const markerInsert = sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')")
+  sqlite.exec('BEGIN')
+  for (const t of targets) {
+    const ruleSetId = num(t.ruleSetId)
+    insert.run(
+      ruleSetId,
+      str(t.groupName),
+      'artifact.pagespeed.shots',
+      'PageSpeed 得分截图（移动端/桌面端）',
+      '保存 pagespeed.web.dev 得分报告截图，作为报告中的性能证据；仅生成截图，不改变规则通过状态',
+      DELIVERABLE_PRESETS['artifact.pagespeed.shots'],
+      'site',
+      'artifact',
+      '{}',
+      num((nextSort.get(ruleSetId) as SqlRow).n)
+    )
+  }
+  sqlite.prepare("DELETE FROM rules WHERE ruleKey = 'perf.pagespeed.score'").run()
+  markerInsert.run(marker)
+  sqlite.exec('COMMIT')
+}
+
 
 function migrateFromJson(sqlite: DatabaseSync): void {
   importJsonList(sqlite, 'sites', 'sites.json', ['id', 'name', 'url', 'remark', 'createdAt', 'updatedAt'], (r) => [
@@ -274,19 +403,23 @@ function migrateFromJson(sqlite: DatabaseSync): void {
   importJsonList(sqlite, 'rule_sets', 'rulesets.json', ['id', 'name', 'description', 'isBuiltin', 'parentId', 'createdAt', 'updatedAt'], (r) => [
     num(r.id), str(r.name), str(r.description), r.isBuiltin ? 1 : 0, r.parentId == null ? null : num(r.parentId), str(r.createdAt), str(r.updatedAt)
   ])
-  importJsonList(sqlite, 'rules', 'rules.json', ['id', 'ruleSetId', 'groupName', 'ruleKey', 'name', 'enabled', 'description', 'deliverable', 'scope', 'params', 'sortOrder'], (r) => [
+  importJsonList(sqlite, 'rules', 'rules.json', ['id', 'ruleSetId', 'groupName', 'ruleKey', 'name', 'enabled', 'description', 'deliverable', 'scope', 'kind', 'params', 'sortOrder'], (r) => [
     num(r.id), num(r.ruleSetId), str(r.groupName), str(r.ruleKey), str(r.name), r.enabled === false ? 0 : 1,
     r.description == null ? null : str(r.description), strOrNull(r.deliverable), strOrNull(r.scope) || 'page',
+    strOrNull(r.kind) || (str(r.ruleKey).startsWith('verify.') ? 'deliverable' : str(r.ruleKey).startsWith('artifact.') ? 'artifact' : 'check'),
     JSON.stringify(r.params ?? {}), num(r.sortOrder)
   ])
-  importJsonList(sqlite, 'tasks', 'tasks.json', ['id', 'siteId', 'ruleSetId', 'status', 'score', 'passCount', 'warnCount', 'failCount', 'skipCount', 'verifyCount', 'startedAt', 'finishedAt', 'pagespeedJson', 'error'], (r) => [
+  importJsonList(sqlite, 'tasks', 'tasks.json', ['id', 'siteId', 'ruleSetId', 'status', 'score', 'passCount', 'warnCount', 'failCount', 'skipCount', 'verifyCount', 'startedAt', 'finishedAt', 'pagespeedJson', 'pageSetJson', 'siteDataJson', 'error'], (r) => [
     num(r.id), num(r.siteId), num(r.ruleSetId), str(r.status), r.score == null ? null : num(r.score),
     num(r.passCount), num(r.warnCount), num(r.failCount), num(r.skipCount), num(r.verifyCount),
     r.startedAt == null ? null : str(r.startedAt), r.finishedAt == null ? null : str(r.finishedAt),
-    r.pagespeedJson == null ? null : str(r.pagespeedJson), r.error == null ? null : str(r.error)
+    r.pagespeedJson == null ? null : str(r.pagespeedJson),
+    r.pageSetJson == null ? null : str(r.pageSetJson), r.siteDataJson == null ? null : str(r.siteDataJson),
+    r.error == null ? null : str(r.error)
   ])
-  importJsonList(sqlite, 'check_results', 'results.json', ['id', 'taskId', 'ruleId', 'ruleKey', 'ruleName', 'groupName', 'status', 'actualValue', 'expectedValue', 'description', 'deliverable', 'screenshotPath', 'note', 'checkedAt'], (r) => [
+  importJsonList(sqlite, 'check_results', 'results.json', ['id', 'taskId', 'ruleId', 'ruleKey', 'ruleName', 'groupName', 'kind', 'status', 'actualValue', 'expectedValue', 'description', 'deliverable', 'screenshotPath', 'note', 'checkedAt'], (r) => [
     num(r.id), num(r.taskId), r.ruleId == null ? null : num(r.ruleId), str(r.ruleKey), str(r.ruleName), str(r.groupName),
+    strOrNull(r.kind) || (str(r.status) === 'verify' ? 'deliverable' : str(r.ruleKey).startsWith('artifact.') ? 'artifact' : 'check'),
     str(r.status), str(r.actualValue), str(r.expectedValue), str(r.description), strOrNull(r.deliverable),
     r.screenshotPath == null ? null : str(r.screenshotPath), str(r.note), str(r.checkedAt)
   ])

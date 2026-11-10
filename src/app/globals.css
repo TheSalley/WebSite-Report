@@ -44,8 +44,9 @@
   --core-zinc-900: #18181b;
 
   /* ── Semantic 语义令牌（玻璃/柔和拟态：半透明面板 + 柔和边框） ── */
-  --background: #eef2fa;
-  --background-elevated: rgba(255, 255, 255, 0.62);
+  --background: #f6f7f9;
+  --background-elevated: rgba(255, 255, 255, 0.82);
+  --panel: rgba(255, 255, 255, 0.88);
   --foreground: #18181b;
   --foreground-muted: #52525b;
   --foreground-subtle: #8b93a7;
@@ -82,8 +83,9 @@
 }
 
 .dark {
-  --background: #0c1122;
-  --background-elevated: rgba(255, 255, 255, 0.06);
+  --background: #0b0f19;
+  --background-elevated: rgba(255, 255, 255, 0.05);
+  --panel: rgba(20, 25, 38, 0.9);
   --foreground: #f4f4f5;
   --foreground-muted: #a1a1aa;
   --foreground-subtle: #6b7384;
@@ -116,6 +118,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-background-elevated: var(--background-elevated);
+  --color-panel: var(--panel);
   --color-foreground: var(--foreground);
   --color-foreground-muted: var(--foreground-muted);
   --color-foreground-subtle: var(--foreground-subtle);
@@ -153,55 +156,42 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* ── 柔和渐变底 + 彩色光斑（Glassmorphism 的透光背景） ── */
+/* ── 安静的中性底色：把视觉重量留给内容与主操作 ── */
 body {
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background:
-    radial-gradient(1100px 620px at 8% -8%, rgba(47, 123, 246, 0.16), transparent 60%),
-    radial-gradient(900px 520px at 108% 12%, rgba(147, 84, 255, 0.13), transparent 55%),
-    radial-gradient(760px 460px at 50% 115%, rgba(16, 185, 129, 0.1), transparent 55%),
-    linear-gradient(180deg, #e8eefb 0%, #eef1fb 45%, #f2effc 100%);
-  background-attachment: fixed;
+  background: var(--background);
 }
 
 .dark body {
-  background:
-    radial-gradient(1100px 620px at 8% -8%, rgba(59, 110, 255, 0.18), transparent 60%),
-    radial-gradient(900px 520px at 108% 12%, rgba(139, 82, 255, 0.14), transparent 55%),
-    radial-gradient(760px 460px at 50% 115%, rgba(13, 148, 136, 0.1), transparent 55%),
-    linear-gradient(180deg, #0a0f20 0%, #0c1122 50%, #0e1024 100%);
-  background-attachment: fixed;
+  background: var(--background);
 }
 
-/* ── Glass 面板基础类（玻璃拟态卡片，配合半透明语义色使用） ── */
+/* 常规面板：清晰边界与极轻阴影，不靠模糊和光效制造层级 */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm-value);
+}
+
+/* 兼容既有报告页面：保留轻量玻璃质感，但去掉装饰性动效 */
 .glass {
   background: var(--background-elevated);
   border: 1px solid var(--border);
-  box-shadow:
-    var(--shadow-sm-value),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  -webkit-backdrop-filter: blur(18px) saturate(1.5);
-  backdrop-filter: blur(18px) saturate(1.5);
+  box-shadow: var(--shadow-sm-value);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
-.dark .glass {
-  box-shadow:
-    var(--shadow-sm-value),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
+.dark .glass { box-shadow: var(--shadow-sm-value); }
 
-/* 玻璃面板 hover 微动效 */
 .glass-hover {
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 .glass-hover:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    var(--shadow-md-value),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  background: color-mix(in srgb, var(--background-elevated) 88%, white);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md-value);
 }
 
 /* 焦点可见环：满足 WCAG 2.4.7 键盘可达性 */

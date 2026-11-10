@@ -1,100 +1,75 @@
-# 网站合规性检测（Next.js 版）
+# 网站合规性检测
 
-基于 Next.js（App Router）重写的网站合规性检测应用。输入网址 → 选择分组 → 真实浏览器深度检测 → 查看结果 → 生成/导出报告。
-
-> 项目思路源自 Electron 桌面版 `F:\Git\WEB-REPORT`，将检测引擎（Playwright + 内置规则库 + PageSpeed 评分/截图）整体迁移为 Web 服务，供本地或内网部署使用。
+基于 Next.js 的网站合规性检测工具：录入站点 → 选择规则分组 → Playwright 真实浏览器检测 → 查看结果 → 生成可打印报告。
 
 ## 功能
 
-- **站点管理**：CRUD、批量导入（每行一个 URL，自动取主机名为名称）
-- **规则分组**：内置规则库；可新建/复制/删除分组，勾选规则、启停并配置说明与交付文案
-- **检测与历史**：后台真实浏览器执行（无头 Chromium + JS 渲染），实时进度、取消、任务历史、结果明细（实际值/期望值/说明/截图证据）、人工复核备注
-- **报告**：所见即所得 HTML 报告（封面/分组明细/截图/PageSpeed 截图），浏览器打印导出 PDF；报告设置（公司名、LOGO、标题、页脚）
-- **PageSpeed**：通过 Google PSI 在线接口采集移动端 + 桌面端评分；并截取 pagespeed.web.dev 的得分报告截图，网络不可用时用本地评分数据渲染兜底
+- 站点管理：新增、编辑、删除、批量导入
+- 规则分组：内置规则库，支持分组、启停和自定义交付说明
+- 检测任务：后台执行、实时进度、取消、历史记录与逐项结果
+- 报告导出：HTML 报告，可通过浏览器打印为 PDF
+- PageSpeed：采集移动端/桌面端得分截图，留存为功能产物
+
+## 规则类型
+
+规则按“是否需要自动执行”分为三类，打开规则设置即可切换。统计口径完全分开，不会把合同承诺当成检测失败。
+
+| 类型 | 适用内容 | 执行方式 | 统计口径 |
+| --- | --- | --- | --- |
+| 自动检测 | SEO、HTTPS、H1、功能入口等可验证项 | 浏览器实际检查 | 计入通过 / 失败 / 跳过 |
+| 合同文案 | 合同条款、服务承诺、交付说明 | 不打开页面，直接生成待验收项 | 仅统计待验收，不计入通过率 |
+| 功能产物 | PageSpeed 得分截图等证据 | 单独执行并保存文件 | 不计入通过率与报告合计 |
+
+判断标准很简单：**能在页面上客观验证的才设为自动检测；合同里的承诺设为合同文案；截图、导出文件设为功能产物。**
+
+规则类型保存在数据库的 `kind` 字段中，是唯一分类依据。旧数据的 `verify.*`、`artifact.*` 前缀仅用于首次迁移兼容，之后修改类型不会再被前缀覆盖。
+
+任务详情按“自动检测 / 合同文案 / 功能产物”分区展示；报告中的“检测合计”和通过率也只统计自动检测项。
 
 ## 快速开始
 
 ```bash
 npm install
-npm run dev        # http://localhost:3000
+npx playwright install chromium
+npm run dev
 ```
 
-检测引擎依赖 Playwright Chromium，需先安装浏览器（首次可执行 `npx playwright install chromium`）。数据默认存储于项目根 `web-report-data/`（SQLite 数据库 `realsite.db`，日志保存在数据库 `logs` 表），可用环境变量 `WEBREPORT_DATA_DIR` 覆盖。
+打开 http://localhost:3000。
 
-## 服务器部署（Linux）
+数据默认保存在 `web-report-data/`，SQLite 数据库为 `reports.db`。
 
-项目内置两个部署脚本，适配宝塔/www 等非 root 运行场景（浏览器装在 root 目录时 www 用户读不到，必须放到公共目录并指定 `PLAYWRIGHT_BROWSERS_PATH`）：
-
-### 1. 首次部署 / 更新依赖
+## 服务器部署
 
 ```bash
 npm ci
-bash install.sh     # root 执行：修 apt → 装系统依赖 → 下载 Chromium（失败自动换国内镜像）→ 复制到 /opt/ms-playwright
+sudo bash install.sh   # 安装系统依赖与 Chromium，并复制到 /opt/ms-playwright
 npm run build
+npx next start -p 3010
 ```
 
-### 2. 启动服务
+`install.sh` 用于 Linux 首次部署，需要 root 权限。应用会自动探测可用的 Playwright 浏览器目录，通常无需手动配置环境变量。
 
-```bash
-npx next start -p 3010     # 直接启动，浏览器路径由代码自动探测，无需手动设置环境变量
-```
+## 环境变量
 
-宝塔面板请在「项目设置 → 启动命令」填写：`npx next start -p 3010`（路径按实际项目目录，端口按需修改）。用 pm2 亦可：`pm2 start npm --name realsite -- run start -- -p 3010`。
-
-> 如果服务器无 apt（CentOS/yum），手动执行 `npx playwright install-deps chromium`、`npx playwright install chromium`，并把 `/root/.cache/ms-playwright`（或对应 `$HOME/.cache`）复制到 `/opt/ms-playwright` 后 `chmod -R a+rX /opt/ms-playwright`。
-
-> 若无法使用 `--with-deps`（无 root/受限环境），可手动安装常用依赖：
-> `apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2`
-
-### 检测失败排查
-
-- 任务状态为「失败」时，打开任务详情会显示具体错误原因（如 Chromium 启动失败）。
-- 常见原因与解决：
-  - **缺少系统依赖**：运行 `npx playwright install-deps chromium` 或将上面的 apt 依赖安装完整。
-  - **内存不足**：容器/小内存机器可设置 `--disable-dev-shm-usage`（引擎已默认带该参数）。
-  - **目标网站网络不通**：确认服务器能访问被检测的站点（部分站点在国内服务器上需代理）。
-
-### 环境变量
-
-- `WEBREPORT_DATA_DIR`：数据目录（默认 `web-report-data/`），多实例部署时需指向共享目录。
-- `PLAYWRIGHT_BROWSERS_PATH`：Playwright 浏览器目录（部署脚本已固定为 `/opt/ms-playwright`），非 root 用户运行时必须设置，否则报 `Executable doesn't exist`。
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `WEBREPORT_DATA_DIR` | `web-report-data/` | 数据目录，包含数据库与截图 |
+| `PLAYWRIGHT_BROWSERS_PATH` | 自动探测 | Playwright 浏览器目录；自动探测失败时可手动指定 |
 
 ## 常用命令
 
 ```bash
-npm run build      # 生产构建
-npm run start      # 生产运行（先 build）
-npm run lint       # ESLint
+npm run dev      # 开发模式
+npm run build    # 生产构建
+npm run start    # 启动生产服务（先 build）
+npm run lint     # 代码检查
 ```
 
-## 项目结构
+## 注意事项
 
-```text
-src/
-├── app/
-│   ├── api/                 # REST API（sites / rulesets / tasks / settings / screenshots / report）
-│   ├── runs/                # 检测与历史
-│   ├── sites/               # 站点管理
-│   ├── rules/               # 规则库与分组
-│   ├── reports/[id]         # 完整报告页（可打印 PDF）
-│   └── reports/settings     # 报告设置
-├── components/              # UI 组件（shadcn 风格）与页面外壳
-└── lib/
-    ├── engine/              # 检测引擎：browser / network-collector / snapshot / scoring / pagespeed
-    │   └── rules/           # 25 条规则实现（SEO/性能/安全/内容/合规）
-    ├── report/              # 报告生成（内联样式 HTML，可打印）
-    ├── store.ts             # SQLite 数据层（node:sqlite，零额外依赖）
-    ├── seed.ts              # 内置规则库与默认分组种子
-    ├── task-service.ts      # 后台任务调度（内存进度 + 持久化）
-    ├── settings.ts / init.ts
-    └── types.ts             # 共享类型
-```
-
-## 已知限制
-
-- 本地 SQLite 存储（Node 内置 node:sqlite，零额外依赖），适合单机/小团队；多用户并发可换 Postgres
-- PageSpeed 评分依赖 Google PSI 在线接口（匿名配额有限）；截图依赖 pagespeed.web.dev，目标站拦截 Google 抓取时只能使用本地渲染兜底
-- 批量检测暂为单任务逐个执行；周期巡检、账号体系为二期方向
+- 使用本地 SQLite 存储，适合单机或小团队部署。
+- PageSpeed 截图依赖 pagespeed.web.dev，目标站需允许 Google 抓取；抓取失败时不保存错误页。
+- 目标网站需能从部署服务器正常访问，否则检测可能失败。
 
 ## 许可
 

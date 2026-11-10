@@ -62,7 +62,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             aria-modal="true"
             aria-labelledby="app-confirm-title"
             aria-describedby={pending.description ? 'app-confirm-description' : undefined}
-            className="relative w-full max-w-sm rounded-2xl border border-border/60 bg-white/85 p-5 shadow-2xl shadow-black/10 backdrop-blur-2xl dark:bg-[#151b30]/90"
+            className="relative w-full max-w-sm rounded-xl border border-border bg-background p-5 shadow-2xl shadow-black/15"
           >
             <div className="flex gap-3.5">
               <div

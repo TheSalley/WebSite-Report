@@ -22,7 +22,6 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
     startedAt: t.startedAt,
     finishedAt: t.finishedAt,
     error: t.error ?? null,
-    pagespeed: t.pagespeedJson ? JSON.parse(t.pagespeedJson) : null,
     pageSet: t.pageSetJson ? JSON.parse(t.pageSetJson) : null,
     siteData: t.siteDataJson ? JSON.parse(t.siteDataJson) : null,
     site,

@@ -1,24 +1,12 @@
 'use client'
 
 import * as React from 'react'
-import {
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  ListChecks,
-  Pencil,
-  Plus,
-  Save,
-  Search,
-  Settings2,
-  Trash2
-} from 'lucide-react'
-import { Button, Card, Dialog, Empty, Input, Label, Switch, Textarea } from '@/components/ui'
+import { ChevronDown, ChevronRight, GripVertical, ListChecks, Plus, Save, Search, Trash2 } from 'lucide-react'
+import { Button, Card, Dialog, Empty, Input, Label, PageHeader, Select, Spinner, Switch, Textarea } from '@/components/ui'
 import { useConfirm } from '@/components/confirm'
-import type { Rule, RuleSet } from '@/lib/types'
+import type { Rule, RuleKind, RuleSet } from '@/lib/types'
+import { RULE_KINDS } from '@/lib/types'
 import { fetchJson, friendlyError } from '@/lib/client-fetch'
-
-type DraftRule = Omit<Rule, 'id'> & { id?: number }
 
 type CatalogRule = {
   groupName: string
@@ -27,19 +15,21 @@ type CatalogRule = {
   description?: string
   deliverable?: string
   scope?: 'page' | 'site'
+  kind?: RuleKind
   params: Record<string, unknown>
 }
 
-type GroupForm = {
-  name: string
-  description: string
-  scanPages: boolean
-}
+type DraftRule = Omit<Rule, 'id'> & { id?: number }
+type GroupForm = { name: string; description: string; scanPages: boolean }
 
 const EMPTY_FORM: GroupForm = { name: '', description: '', scanPages: false }
+const KIND_OPTIONS = RULE_KINDS.map((kind) => ({ value: kind.key, label: kind.label }))
 
-function formOf(rs: RuleSet): GroupForm {
-  return { name: rs.name, description: rs.description, scanPages: rs.scanPages }
+/** 添加规则弹窗的业务分类：功能检测包含自动检测与 PageSpeed 等产物 */
+type PickerCategory = 'functional' | 'deliverable'
+
+function categoryOf(kind: RuleKind): PickerCategory {
+  return kind === 'deliverable' ? 'deliverable' : 'functional'
 }
 
 function draftOf(item: CatalogRule, ruleSetId: number, sortOrder: number): DraftRule {
@@ -52,313 +42,132 @@ function draftOf(item: CatalogRule, ruleSetId: number, sortOrder: number): Draft
     description: item.description,
     deliverable: item.deliverable,
     scope: item.scope ?? 'page',
+    kind: item.kind ?? 'check',
     params: item.params ?? {},
     sortOrder
   }
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
-  const body = await res.json().catch(() => null)
-  if (!res.ok) throw new Error((body as { error?: string } | null)?.error ?? '请求失败')
-  return body as T
+function formOf(set: RuleSet): GroupForm {
+  return { name: set.name, description: set.description, scanPages: set.scanPages }
+}
+
+function kindMeta(kind: RuleKind) {
+  return RULE_KINDS.find((item) => item.key === kind) ?? RULE_KINDS[0]
 }
 
 export default function RulesPage() {
   const confirm = useConfirm()
-  const [ruleSets, setRuleSets] = React.useState<RuleSet[]>([])
+  const [sets, setSets] = React.useState<RuleSet[]>([])
   const [catalog, setCatalog] = React.useState<CatalogRule[]>([])
   const [selectedId, setSelectedId] = React.useState<number | null>(null)
   const [rules, setRules] = React.useState<DraftRule[]>([])
   const [form, setForm] = React.useState<GroupForm>(EMPTY_FORM)
-  const [query, setQuery] = React.useState('')
-  const [configKey, setConfigKey] = React.useState<string | null>(null)
   const [dirty, setDirty] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
+  const [query, setQuery] = React.useState('')
+  const [expanded, setExpanded] = React.useState<string | null>(null)
+  const [draggedKey, setDraggedKey] = React.useState<string | null>(null)
+  const [dragOverKey, setDragOverKey] = React.useState<string | null>(null)
+  const [dragOverAfter, setDragOverAfter] = React.useState(false)
+  const [groupOpen, setGroupOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [newName, setNewName] = React.useState('')
   const [newDesc, setNewDesc] = React.useState('')
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [pickerQuery, setPickerQuery] = React.useState('')
-  const [infoOpen, setInfoOpen] = React.useState(false)
-  /** 分组折叠状态：未记录的项按「是否已选规则」决定默认展开 */
-  const [expanded, setExpanded] = React.useState<Record<string, boolean>>({})
+  const [pickerCategory, setPickerCategory] = React.useState<PickerCategory>('functional')
+  const [pickerKeys, setPickerKeys] = React.useState<Set<string>>(new Set())
+  const groupSnapshot = React.useRef<{ form: GroupForm; dirty: boolean } | null>(null)
 
-  const selectedSet = ruleSets.find((rs) => rs.id === selectedId) ?? null
-  const configRule = configKey ? rules.find((r) => r.ruleKey === configKey) ?? null : null
+  const selectedSet = sets.find((set) => set.id === selectedId) ?? null
+  const byKey = React.useMemo(() => new Map(rules.map((rule) => [rule.ruleKey, rule])), [rules])
 
   React.useEffect(() => {
     ;(async () => {
       try {
-        const [sets, items] = await Promise.all([
+        const [setData, catalogData] = await Promise.all([
           fetchJson<RuleSet[]>('/api/rulesets'),
           fetchJson<CatalogRule[]>('/api/rulesets/catalog')
         ])
-        setRuleSets(sets)
-        setCatalog(items)
-        if (sets.length > 0) {
-          setSelectedId(sets[0].id)
-          setForm(formOf(sets[0]))
-          setRules(await fetchJson<DraftRule[]>(`/api/rulesets/${sets[0].id}/rules`))
-        }
+        setSets(setData)
+        setCatalog(catalogData)
+        if (setData[0]) await chooseSet(setData[0], false)
       } catch (e) {
         setError(friendlyError(e))
       } finally {
         setLoading(false)
       }
     })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const refreshSets = async (): Promise<RuleSet[]> => {
-    const data = await fetchJson<RuleSet[]>('/api/rulesets')
-    setRuleSets(data)
-    return data
-  }
-
-  const selectSet = async (rs: RuleSet) => {
-    if (rs.id === selectedId) return
-    if (saving) return
-    if (dirty) {
+  async function chooseSet(set: RuleSet, guard = true) {
+    if (guard && dirty) {
       const ok = await confirm({
         title: '放弃未保存的修改？',
-        description: '当前分组有未保存的修改，切换分组会丢失这些修改。',
+        description: '切换分组会丢失当前未保存的修改。',
         confirmText: '继续切换',
         cancelText: '留在当前分组',
         danger: false
       })
       if (!ok) return
     }
-    try {
-      setSelectedId(rs.id)
-      setForm(formOf(rs))
-      setConfigKey(null)
-      setExpanded({})
-      setInfoOpen(false)
-      setRules(await fetchJson<DraftRule[]>(`/api/rulesets/${rs.id}/rules`))
-      setDirty(false)
-      setError('')
-    } catch (e) {
-      setError(friendlyError(e))
-    }
+    setSelectedId(set.id)
+    setForm(formOf(set))
+    setRules((await fetchJson<DraftRule[]>(`/api/rulesets/${set.id}/rules`)).map((rule) => ({ ...rule, enabled: true })))
+    setDirty(false)
+    setExpanded(null)
+    setError('')
   }
 
-  const createGroup = async () => {
-    if (!newName.trim()) return
-    try {
-      const created = await request<RuleSet>('/api/rulesets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim(), description: newDesc })
-      })
-      await refreshSets()
-      setCreateOpen(false)
-      setNewName('')
-      setNewDesc('')
-      setSelectedId(created.id)
-      setForm(formOf(created))
-      setRules([])
-      setDirty(false)
-      setConfigKey(null)
-      setExpanded({})
-      setInfoOpen(false)
-      setError('')
-    } catch (e) {
-      setError(friendlyError(e))
-    }
-  }
-
-  const duplicateSet = async (rs: RuleSet) => {
-    if (saving) return
-    if (dirty) {
-      const ok = await confirm({
-        title: '放弃未保存的修改？',
-        description: '当前分组有未保存的修改，复制并切换分组会丢失这些修改。',
-        confirmText: '复制并切换',
-        cancelText: '取消',
-        danger: false
-      })
-      if (!ok) return
-    }
-    try {
-      const dup = await request<RuleSet>(`/api/rulesets/${rs.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ duplicate: true, name: `${rs.name} 副本` })
-      })
-      await refreshSets()
-      setSelectedId(dup.id)
-      setForm(formOf(dup))
-      setRules(await fetchJson<DraftRule[]>(`/api/rulesets/${dup.id}/rules`))
-      setDirty(false)
-      setConfigKey(null)
-      setExpanded({})
-      setInfoOpen(false)
-      setError('')
-    } catch (e) {
-      setError(friendlyError(e))
-    }
-  }
-
-  const deleteSet = async (rs: RuleSet) => {
-    if (saving) return
-    const ok = await confirm({
-      title: '删除分组',
-      description: `确认删除分组「${rs.name}」？分组内的规则选择会一并删除，历史检测记录不受影响。此操作不可撤销。`,
-      confirmText: '删除'
-    })
-    if (!ok) return
-    try {
-      await request(`/api/rulesets/${rs.id}`, { method: 'DELETE' })
-      const list = await refreshSets()
-      if (selectedId === rs.id) {
-        const next = list[0] ?? null
-        if (next) {
-          setSelectedId(next.id)
-          setForm(formOf(next))
-          setRules(await fetchJson<DraftRule[]>(`/api/rulesets/${next.id}/rules`))
-        } else {
-          setSelectedId(null)
-          setForm(EMPTY_FORM)
-          setRules([])
-        }
-        setDirty(false)
-        setConfigKey(null)
-        setExpanded({})
-        setInfoOpen(false)
-      }
-      setError('')
-    } catch (e) {
-      setError(friendlyError(e))
-    }
-  }
-
-  const toggleRule = (item: CatalogRule, checked: boolean) => {
-    setDirty(true)
-    setRules((prev) => {
-      if (!checked) return prev.filter((r) => r.ruleKey !== item.ruleKey)
-      if (prev.some((r) => r.ruleKey === item.ruleKey)) return prev
-      return [...prev, draftOf(item, selectedId ?? 0, prev.length + 1)]
-    })
-  }
-
-  const toggleCategory = (items: CatalogRule[], checked: boolean) => {
-    setDirty(true)
-    setRules((prev) => {
-      if (!checked) {
-        const drop = new Set(items.map((i) => i.ruleKey))
-        return prev.filter((r) => !drop.has(r.ruleKey))
-      }
-      const keys = new Set(prev.map((r) => r.ruleKey))
-      const next = [...prev]
-      for (const item of items) {
-        if (keys.has(item.ruleKey)) continue
-        keys.add(item.ruleKey)
-        next.push(draftOf(item, selectedId ?? 0, next.length + 1))
-      }
-      return next
-    })
+  const refreshSets = async () => {
+    const data = await fetchJson<RuleSet[]>('/api/rulesets')
+    setSets(data)
+    return data
   }
 
   const patchRule = (ruleKey: string, patch: Partial<DraftRule>) => {
-    setRules((prev) => prev.map((r) => (r.ruleKey === ruleKey ? { ...r, ...patch } : r)))
+    setRules((prev) => prev.map((rule) => (rule.ruleKey === ruleKey ? { ...rule, ...patch } : rule)))
     setDirty(true)
   }
 
-  const save = React.useCallback(async () => {
-    if (selectedId === null || !form.name.trim()) return
+  const save = React.useCallback(async (nextForm: GroupForm = form, nextRules: DraftRule[] = rules) => {
+    if (selectedId === null || !nextForm.name.trim()) return false
+    const normalizedRules = nextRules.map((rule, index) => ({ ...rule, sortOrder: index + 1 }))
     setSaving(true)
     try {
-      await request(`/api/rulesets/${selectedId}`, {
+      await fetchJson(`/api/rulesets/${selectedId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, name: form.name.trim() })
+        body: JSON.stringify({ ...nextForm, name: nextForm.name.trim() })
       })
-      await request(`/api/rulesets/${selectedId}/rules`, {
+      await fetchJson(`/api/rulesets/${selectedId}/rules`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rules.map(({ id, ...rest }) => rest))
+        body: JSON.stringify(normalizedRules.map(({ id, ...rest }) => ({ ...rest, enabled: true })))
       })
+      setRules(normalizedRules)
+      setForm({ ...nextForm, name: nextForm.name.trim() })
       setDirty(false)
-      await refreshSets()
       setError('')
+      await refreshSets()
+      return true
     } catch (e) {
       setError(friendlyError(e))
+      return false
     } finally {
       setSaving(false)
     }
   }, [selectedId, form, rules])
 
-  const selectedKeys = React.useMemo(() => new Set(rules.map((r) => r.ruleKey)), [rules])
-
-  /** 分组名 -> 全量规则（用于显示分组完整计数） */
-  const fullGroups = React.useMemo(() => {
-    const map = new Map<string, CatalogRule[]>()
-    for (const item of catalog) {
-      const arr = map.get(item.groupName) ?? []
-      arr.push(item)
-      map.set(item.groupName, arr)
-    }
-    return map
-  }, [catalog])
-
-  /** 按分组归类并按关键词过滤；onlySelected 为 true 时只保留已勾选规则 */
-  const groupCatalog = React.useCallback(
-    (keyword: string, onlySelected: boolean) => {
-      const q = keyword.trim().toLowerCase()
-      const map = new Map<string, CatalogRule[]>()
-      for (const item of catalog) {
-        if (onlySelected && !selectedKeys.has(item.ruleKey)) continue
-        if (q && !`${item.name} ${item.ruleKey} ${item.groupName}`.toLowerCase().includes(q)) continue
-        const arr = map.get(item.groupName) ?? []
-        arr.push(item)
-        map.set(item.groupName, arr)
-      }
-      return Array.from(map.entries())
-    },
-    [catalog, selectedKeys]
-  )
-
-  /** 面板中只展示已勾选的规则 */
-  const selectedGroups = React.useMemo(() => groupCatalog(query, true), [groupCatalog, query])
-  /** 「添加规则」弹窗展示完整规则库 */
-  const pickerGroups = React.useMemo(() => groupCatalog(pickerQuery, false), [groupCatalog, pickerQuery])
-
-  /** ruleKey -> 草稿，避免逐行 rules.find 的 O(n²) 查找 */
-  const ruleByKey = React.useMemo(() => new Map(rules.map((r) => [r.ruleKey, r])), [rules])
-
-  /** 有筛选或搜索时强制展开，避免结果藏在折叠分组里 */
-  const forceExpand = query.trim() !== ''
-
-  const isGroupOpen = (groupName: string, items: CatalogRule[]): boolean => {
-    if (forceExpand) return true
-    const saved = expanded[groupName]
-    if (saved !== undefined) return saved
-    return items.some((item) => selectedKeys.has(item.ruleKey))
-  }
-
-  const toggleGroup = (groupName: string, items: CatalogRule[]) => {
-    setExpanded((prev) => ({ ...prev, [groupName]: !isGroupOpen(groupName, items) }))
-  }
-
-  const openPicker = () => {
-    setPickerQuery('')
-    setPickerOpen(true)
-  }
-
-  const selectedSiteCount = React.useMemo(
-    () => rules.filter((r) => r.scope === 'site').length,
-    [rules]
-  )
-
-  const canSave = dirty && !saving && form.name.trim() !== ''
-
   React.useEffect(() => {
     if (!dirty) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
         void save()
       }
     }
@@ -366,347 +175,280 @@ export default function RulesPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [dirty, save])
 
+  const createGroup = async () => {
+    if (!newName.trim()) return
+    setSaving(true)
+    try {
+      const created = await fetchJson<RuleSet>('/api/rulesets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim(), description: newDesc })
+      })
+      await refreshSets()
+      setSelectedId(created.id)
+      setForm(formOf(created))
+      setRules([])
+      setDirty(false)
+      setCreateOpen(false)
+      setNewName('')
+      setNewDesc('')
+    } catch (e) {
+      setError(friendlyError(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const duplicateSet = async () => {
+    if (!selectedSet) return
+    try {
+      const duplicated = await fetchJson<RuleSet>(`/api/rulesets/${selectedSet.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duplicate: true, name: `${selectedSet.name} 副本` })
+      })
+      await refreshSets()
+      await chooseSet(duplicated, false)
+      setGroupOpen(false)
+    } catch (e) {
+      setError(friendlyError(e))
+    }
+  }
+
+  const deleteSet = async () => {
+    if (!selectedSet) return
+    const ok = await confirm({
+      title: '删除分组',
+      description: `确认删除「${selectedSet.name}」？历史检测记录不受影响。`,
+      confirmText: '删除'
+    })
+    if (!ok) return
+    try {
+      await fetchJson(`/api/rulesets/${selectedSet.id}`, { method: 'DELETE' })
+      const list = await refreshSets()
+      setGroupOpen(false)
+      if (list[0]) await chooseSet(list[0], false)
+      else {
+        setSelectedId(null)
+        setForm(EMPTY_FORM)
+        setRules([])
+      }
+    } catch (e) {
+      setError(friendlyError(e))
+    }
+  }
+
+  const openPicker = () => {
+    setPickerKeys(new Set(rules.map((rule) => rule.ruleKey)))
+    setPickerQuery('')
+    setPickerCategory('functional')
+    setPickerOpen(true)
+  }
+
+  const openGroup = () => {
+    groupSnapshot.current = { form: { ...form }, dirty }
+    setGroupOpen(true)
+  }
+
+  const closeGroup = () => {
+    if (groupSnapshot.current) {
+      setForm(groupSnapshot.current.form)
+      setDirty(groupSnapshot.current.dirty)
+    }
+    groupSnapshot.current = null
+    setGroupOpen(false)
+  }
+
+  const closePicker = () => {
+    setPickerKeys(new Set())
+    setPickerOpen(false)
+  }
+
+  const togglePickerRule = (ruleKey: string, checked: boolean) => {
+    setPickerKeys((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(ruleKey)
+      else next.delete(ruleKey)
+      return next
+    })
+  }
+
+  /** 弹窗内勾选只暂存；点击保存时才把这套选择合并进当前分组 */
+  const pickerRules = React.useMemo(() => {
+    const next = rules.filter((rule) => pickerKeys.has(rule.ruleKey))
+    const existing = new Set(next.map((rule) => rule.ruleKey))
+    for (const item of catalog) {
+      if (!pickerKeys.has(item.ruleKey) || existing.has(item.ruleKey)) continue
+      next.push(draftOf(item, selectedId ?? 0, next.length + 1))
+      existing.add(item.ruleKey)
+    }
+    return next
+  }, [rules, pickerKeys, catalog, selectedId])
+
+  const savePicker = async () => {
+    if (await save(form, pickerRules)) {
+      setPickerKeys(new Set())
+      setPickerOpen(false)
+    }
+  }
+
+  const removeRule = (ruleKey: string) => {
+    setRules((prev) => prev.filter((rule) => rule.ruleKey !== ruleKey))
+    setDirty(true)
+  }
+
+  const moveRule = (fromKey: string, toKey: string, after: boolean) => {
+    if (fromKey === toKey) return
+    setRules((prev) => {
+      const from = prev.findIndex((rule) => rule.ruleKey === fromKey)
+      if (from < 0) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      const target = next.findIndex((rule) => rule.ruleKey === toKey)
+      if (target < 0) return prev
+      next.splice(target + (after ? 1 : 0), 0, moved)
+      return next.map((rule, index) => ({ ...rule, sortOrder: index + 1 }))
+    })
+    setDirty(true)
+  }
+
+  const visibleRules = React.useMemo(() => {
+    const keyword = query.trim().toLowerCase()
+    return rules.filter((rule) => !keyword || `${rule.name} ${rule.ruleKey}`.toLowerCase().includes(keyword))
+  }, [rules, query])
+
+  const filteredCatalog = React.useMemo(() => {
+    const keyword = pickerQuery.trim().toLowerCase()
+    return catalog.filter((item) => {
+      const rule = byKey.get(item.ruleKey)
+      const kind = rule?.kind ?? item.kind ?? 'check'
+      if (categoryOf(kind) !== pickerCategory) return false
+      return !keyword || `${item.name} ${item.ruleKey}`.toLowerCase().includes(keyword)
+    })
+  }, [catalog, byKey, pickerCategory, pickerQuery])
+
+  /** Tab 数量跟随搜索条件，但不受当前 Tab 影响，便于判断其他类型里有多少结果 */
+  const pickerCounts = React.useMemo(() => {
+    const keyword = pickerQuery.trim().toLowerCase()
+    const counts: Record<PickerCategory, number> = { functional: 0, deliverable: 0 }
+    for (const item of catalog) {
+      if (keyword && !`${item.name} ${item.ruleKey}`.toLowerCase().includes(keyword)) continue
+      const kind = byKey.get(item.ruleKey)?.kind ?? item.kind ?? 'check'
+      counts[categoryOf(kind)]++
+    }
+    return counts
+  }, [catalog, byKey, pickerQuery])
+
+  const pickerTabs: { key: PickerCategory; label: string }[] = [
+    { key: 'functional', label: '功能检测' },
+    { key: 'deliverable', label: '合同文案' }
+  ]
+
+  if (loading) return <div className="flex justify-center py-24"><Spinner /></div>
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">规则分组</h1>
-          <p className="mt-0.5 text-sm text-foreground-muted">从规则库勾选规则组成检测分组；每个分组独立保存规则选择与参数。</p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> 新建分组
-        </Button>
-      </div>
+    <div className="space-y-7">
+      <PageHeader
+        title="规则"
+        description="用规则分组定义每次检测的范围。放入分组即启用，移除即停用。"
+        actions={<Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> 新建分组</Button>}
+      />
 
-      {error && <div className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>}
+      {error && <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>}
 
-      {loading ? (
-        <div className="flex justify-center py-16"><span className="text-sm text-foreground-subtle">加载中…</span></div>
-      ) : ruleSets.length === 0 ? (
-        <Empty icon={<ListChecks className="h-8 w-8" />} title="还没有规则分组" description="点击「新建分组」，然后通过「添加规则」勾选需要的规则。" />
+      {sets.length === 0 ? (
+        <Empty icon={<ListChecks className="h-7 w-7" />} title="还没有规则分组" description="先新建一个分组，再从规则库添加需要的规则。" />
       ) : (
-        <div className="grid gap-4 md:grid-cols-[260px_1fr]">
+        <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
           <Card className="h-fit overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <span className="text-sm font-medium">我的分组</span>
-              <span className="text-xs text-foreground-subtle">{ruleSets.length} 个</span>
-            </div>
-            <nav className="divide-y divide-border/70">
-              {ruleSets.map((rs) => {
-                const active = selectedId === rs.id
-                return (
-                  <div
-                    key={rs.id}
-                    className={`group flex items-center gap-1 px-3 py-2.5 text-sm transition-colors ${
-                      active ? 'bg-primary-soft/70 backdrop-blur-sm' : 'hover:bg-white/55 dark:hover:bg-white/[0.05]'
-                    }`}
-                  >
-                    <button className="min-w-0 flex-1 text-left" onClick={() => selectSet(rs)}>
-                      <span className={`block truncate font-medium ${active ? 'text-primary-soft-foreground' : ''}`}>{rs.name}</span>
-                      <span className="mt-0.5 block text-[11px] text-foreground-subtle">
-                        {rs.ruleCount ?? 0} 条规则{rs.isBuiltin ? ' · 默认' : ''}
-                      </span>
-                    </button>
-                    <div className="flex shrink-0 gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-                      <Button variant="ghost" size="sm" onClick={() => duplicateSet(rs)} title="复制分组">
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => deleteSet(rs)} title="删除分组">
-                        <Trash2 className="h-3 w-3 text-danger" />
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
+            <nav className="divide-y divide-border">
+              {sets.map((set) => (
+                <button
+                  key={set.id}
+                  type="button"
+                  onClick={() => void chooseSet(set)}
+                  className={`block w-full px-4 py-3 text-left transition-colors ${
+                    selectedId === set.id ? 'bg-primary-soft/60' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <span className={`block truncate text-sm font-medium ${selectedId === set.id ? 'text-primary-soft-foreground' : ''}`}>{set.name}</span>
+                  <span className="mt-0.5 block text-[11px] text-foreground-subtle">
+                    {selectedId === set.id ? rules.length : set.ruleCount ?? 0} 条规则
+                    {set.isBuiltin ? ' · 默认' : ''}
+                  </span>
+                </button>
+              ))}
             </nav>
           </Card>
 
           {selectedSet && (
-            <Card className="overflow-hidden">
-              <div className="border-b border-border/60 bg-white/40 px-4 py-3 dark:bg-white/[0.04] sm:px-5">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{form.name || '未命名分组'}</div>
-                    <div className="mt-0.5 truncate text-xs text-foreground-subtle">
-                      已选 {rules.length} 条（页面级 {rules.length - selectedSiteCount} · 站点级 {selectedSiteCount}）· 规则库共 {catalog.length} 条
-                      {form.scanPages && ' · 多页面模板检查'}
+            <div className="space-y-4">
+              <Card className="p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate text-lg font-semibold">{form.name || '未命名分组'}</h2>
+                      {dirty && <span className="text-xs font-medium text-warning">未保存</span>}
                     </div>
+                    <p className="mt-1 text-xs text-foreground-muted">
+                      {rules.length} 条规则{form.scanPages ? ' · 多页面模板检查' : ''}
+                    </p>
+                    {form.description && <p className="mt-1 text-sm text-foreground-muted">{form.description}</p>}
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setInfoOpen((v) => !v)}>
-                      <Pencil className="h-3.5 w-3.5" /> {infoOpen ? '收起设置' : '编辑分组'}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => duplicateSet(selectedSet)}>
-                      <Copy className="h-3.5 w-3.5" /> 复制
-                    </Button>
-                    <Button size="sm" onClick={openPicker}>
-                      <Plus className="h-3.5 w-3.5" /> 添加规则
-                    </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={openGroup}>分组设置</Button>
+                    <Button size="sm" onClick={openPicker}><Plus className="h-3.5 w-3.5" /> 添加规则</Button>
                   </div>
                 </div>
+              </Card>
 
-                {infoOpen && (
-                  <div className="mt-3 space-y-3 border-t border-border/60 pt-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label>分组名称</Label>
-                        <Input
-                          value={form.name}
-                          onChange={(e) => {
-                            setForm((f) => ({ ...f, name: e.target.value }))
-                            setDirty(true)
-                          }}
-                          placeholder="例如：上线前全面检查"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>说明</Label>
-                        <Textarea
-                          rows={2}
-                          value={form.description}
-                          onChange={(e) => {
-                            setForm((f) => ({ ...f, description: e.target.value }))
-                            setDirty(true)
-                          }}
-                          placeholder="这个分组用于什么场景（可选）"
-                        />
-                      </div>
-                      <div className="hidden sm:block" />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-foreground-subtle">
-                      <label className="flex items-center gap-2 text-foreground-muted">
-                        <Switch
-                          checked={form.scanPages}
-                          onCheckedChange={(v) => {
-                            setForm((f) => ({ ...f, scanPages: v }))
-                            setDirty(true)
-                          }}
-                        />
-                        多页面模板检查
-                      </label>
-                      <span>按 sitemap 枚举并去重，模板页只检测代表页</span>
-                    </div>
-                  </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-0 flex-1 sm:max-w-72">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-subtle" />
+                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索规则" className="h-8 pl-8 text-xs" />
+                </div>
+                {!query.trim() && rules.length > 1 && (
+                  <span className="text-xs text-foreground-subtle">拖动左侧手柄调整顺序</span>
+                )}
+                {dirty && (
+                  <Button size="sm" onClick={() => void save()} disabled={saving} className="ml-auto">
+                    <Save className="h-3.5 w-3.5" /> {saving ? '保存中…' : '保存'}
+                  </Button>
                 )}
               </div>
 
-              <div className="p-4 sm:p-5">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <div className="relative min-w-0 flex-1 sm:max-w-64">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-subtle" />
-                    <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索已选规则" className="pl-8" />
-                  </div>
-                  <span className="text-xs text-foreground-subtle">仅显示已勾选的规则</span>
+              {rules.length === 0 ? (
+                <Empty icon={<ListChecks className="h-7 w-7" />} title="这个分组还没有规则" description="从规则库添加自动检测、合同文案或功能产物。" />
+              ) : visibleRules.length === 0 ? (
+                <Empty icon={<Search className="h-7 w-7" />} title="没有匹配的规则" description="换个关键词试试。" />
+              ) : (
+                <div className="space-y-5">
+                  <Card className="divide-y divide-border overflow-hidden">
+                    {visibleRules.map((rule) => (
+                      <RuleItem
+                        key={rule.ruleKey}
+                        rule={rule}
+                        open={expanded === rule.ruleKey}
+                        dragging={draggedKey === rule.ruleKey}
+                        dragOver={dragOverKey === rule.ruleKey && draggedKey !== rule.ruleKey}
+                        dragOverAfter={dragOverAfter}
+                        draggable={!query.trim()}
+                        onToggle={() => setExpanded(expanded === rule.ruleKey ? null : rule.ruleKey)}
+                        onChange={(patch) => patchRule(rule.ruleKey, patch)}
+                        onRemove={() => removeRule(rule.ruleKey)}
+                        onDragStart={() => setDraggedKey(rule.ruleKey)}
+                        onDragOver={(after) => { setDragOverKey(rule.ruleKey); setDragOverAfter(after) }}
+                        onDrop={(after) => { if (draggedKey) moveRule(draggedKey, rule.ruleKey, after) }}
+                        onDragEnd={() => { setDraggedKey(null); setDragOverKey(null); setDragOverAfter(false) }}
+                      />
+                    ))}
+                  </Card>
                 </div>
-
-                {rules.length === 0 ? (
-                  <div className="space-y-3">
-                    <Empty icon={<ListChecks className="h-8 w-8" />} title="还没有勾选规则" description="打开规则库勾选需要执行的规则后，这里只显示已选的规则。" />
-                    <div className="text-center">
-                      <Button variant="outline" size="sm" onClick={openPicker}>
-                        <Plus className="h-3.5 w-3.5" /> 打开规则库
-                      </Button>
-                    </div>
-                  </div>
-                ) : selectedGroups.length === 0 ? (
-                  <Empty icon={<Search className="h-8 w-8" />} title="没有匹配的已选规则" description="换个关键词试试。" />
-                ) : (
-                  <div className="space-y-2">
-                    {selectedGroups.map(([groupName, items]) => {
-                      const fullItems = fullGroups.get(groupName) ?? items
-                      const selectedCount = fullItems.filter((i) => selectedKeys.has(i.ruleKey)).length
-                      const open = isGroupOpen(groupName, items)
-                      return (
-                        <div key={groupName} className="overflow-hidden rounded-xl border border-border/60">
-                          <div className="flex items-center gap-2 bg-white/45 px-3 py-2 dark:bg-white/[0.05]">
-                            <button
-                              type="button"
-                              onClick={() => toggleGroup(groupName, items)}
-                              className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                              aria-expanded={open}
-                            >
-                              {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
-                              <span className="truncate text-sm font-medium">{groupName}</span>
-                              <span className={`shrink-0 text-xs tabular-nums ${selectedCount > 0 ? 'text-primary' : 'text-foreground-subtle'}`}>
-                                {selectedCount}/{fullItems.length}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              className="shrink-0 text-xs font-medium text-primary hover:underline"
-                              onClick={() => toggleCategory(fullItems, false)}
-                              title="从分组中移除该组所有已选规则"
-                            >
-                              移除该组
-                            </button>
-                          </div>
-                          {open && (
-                          <div className="divide-y divide-border/70 border-t border-border/60">
-                            {items.map((item) => {
-                              const selected = selectedKeys.has(item.ruleKey)
-                              const current = ruleByKey.get(item.ruleKey)
-                              return (
-                                <div
-                                  key={item.ruleKey}
-                                  className={`flex items-start gap-2.5 px-3 py-2 transition-colors ${selected ? 'bg-primary-soft/25' : 'hover:bg-white/50 dark:hover:bg-white/[0.04]'}`}
-                                >
-                                  <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
-                                    <input
-                                      type="checkbox"
-                                      checked={selected}
-                                      onChange={(e) => toggleRule(item, e.target.checked)}
-                                      className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-primary"
-                                    />
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                        <span className="text-sm font-medium">{item.name}</span>
-                                        {item.scope === 'site' && (
-                                          <span className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-medium text-primary-soft-foreground">站点级</span>
-                                        )}
-                                        {current?.params?.defaultPass === true && (
-                                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">默认通过</span>
-                                        )}
-                                        {current && !current.enabled && (
-                                          <span className="rounded bg-zinc-500/10 px-1.5 py-0.5 text-[10px] font-medium text-foreground-subtle">已停用</span>
-                                        )}
-                                      </div>
-                                      <div className="mt-0.5 truncate text-[11px] text-foreground-subtle">
-                                        <span className="font-mono">{item.ruleKey}</span>
-                                        {item.description && (
-                                          <span className={`${selected ? '' : 'hidden sm:inline'} text-foreground-muted`}> · {item.description}</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </label>
-                                  {selected && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      title="规则设置"
-                                      className="shrink-0"
-                                      onClick={() => setConfigKey(item.ruleKey)}
-                                    >
-                                      <Settings2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-white/85 px-4 py-2.5 backdrop-blur dark:bg-zinc-950/85 sm:px-5">
-                <div className="text-xs text-foreground-subtle">
-                  {dirty ? (
-                    <span className="text-amber-700 dark:text-amber-400">有未保存的修改</span>
-                  ) : (
-                    <span>所有修改已保存</span>
-                  )}
-                  <span className="ml-2 hidden sm:inline">Ctrl/⌘ + S 保存</span>
-                </div>
-                <Button size="sm" onClick={save} disabled={!canSave}>
-                  <Save className="h-3.5 w-3.5" /> {saving ? '保存中…' : '保存'}
-                </Button>
-              </div>
-            </Card>
-          )}
-        </div>
-      )}
-
-      <Dialog
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        title="添加规则"
-        width="max-w-2xl"
-        footer={
-          <>
-            <span className="mr-auto self-center text-xs text-foreground-subtle">
-              当前分组已选 {rules.length} / {catalog.length} 条
-            </span>
-            <Button onClick={() => setPickerOpen(false)}>完成</Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-subtle" />
-            <Input
-              value={pickerQuery}
-              onChange={(e) => setPickerQuery(e.target.value)}
-              placeholder="搜索规则名称或 key"
-              className="pl-8"
-            />
-          </div>
-          {pickerGroups.length === 0 ? (
-            <Empty icon={<Search className="h-8 w-8" />} title="没有匹配的规则" description="换个关键词试试。" />
-          ) : (
-            <div className="space-y-2">
-              {pickerGroups.map(([groupName, items]) => {
-                const fullItems = fullGroups.get(groupName) ?? items
-                const selectedCount = fullItems.filter((i) => selectedKeys.has(i.ruleKey)).length
-                const allSelected = items.every((i) => selectedKeys.has(i.ruleKey))
-                return (
-                  <div key={groupName} className="overflow-hidden rounded-xl border border-border/60">
-                    <div className="flex items-center gap-2 bg-white/45 px-3 py-2 dark:bg-white/[0.05]">
-                      <div className="min-w-0 flex-1 truncate text-sm font-medium">
-                        {groupName}{' '}
-                        <span className={`text-xs tabular-nums ${selectedCount > 0 ? 'text-primary' : 'text-foreground-subtle'}`}>
-                          {selectedCount}/{fullItems.length}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        className="shrink-0 text-xs font-medium text-primary hover:underline"
-                        onClick={() => toggleCategory(items, !allSelected)}
-                      >
-                        {allSelected ? '清空该组' : '全选该组'}
-                      </button>
-                    </div>
-                    <div className="divide-y divide-border/70 border-t border-border/60">
-                      {items.map((item) => {
-                        const selected = selectedKeys.has(item.ruleKey)
-                        return (
-                          <label
-                            key={item.ruleKey}
-                            className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 transition-colors ${selected ? 'bg-primary-soft/25' : 'hover:bg-white/50 dark:hover:bg-white/[0.04]'}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={(e) => toggleRule(item, e.target.checked)}
-                              className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-primary"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <span className="text-sm font-medium">{item.name}</span>
-                                {item.scope === 'site' && (
-                                  <span className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-medium text-primary-soft-foreground">站点级</span>
-                                )}
-                              </div>
-                              <div className="mt-0.5 truncate text-[11px] text-foreground-subtle">
-                                <span className="font-mono">{item.ruleKey}</span>
-                                {item.description && (
-                                  <span className="text-foreground-muted"> · {item.description}</span>
-                                )}
-                              </div>
-                            </div>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
+              )}
             </div>
           )}
         </div>
-      </Dialog>
+      )}
 
       <Dialog
         open={createOpen}
@@ -715,67 +457,231 @@ export default function RulesPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>取消</Button>
-            <Button onClick={createGroup} disabled={!newName.trim()}>创建</Button>
+            <Button onClick={() => void createGroup()} disabled={saving || !newName.trim()}>{saving && <Spinner />} 创建</Button>
           </>
         }
       >
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>分组名称</Label>
-            <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="例如：上线前全面检查" />
-          </div>
-          <div className="space-y-1.5">
+          <label className="block space-y-1.5">
+            <Label>名称</Label>
+            <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="例如：上线前全面检查" autoFocus />
+          </label>
+          <label className="block space-y-1.5">
             <Label>说明</Label>
             <Textarea rows={3} value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="可选" />
-          </div>
-          <p className="text-xs text-foreground-subtle">创建后点击「添加规则」，在规则库中勾选要执行的规则。</p>
+          </label>
         </div>
       </Dialog>
 
       <Dialog
-        open={configRule !== null}
-        onClose={() => setConfigKey(null)}
-        title={configRule ? `规则设置 · ${configRule.name}` : '规则设置'}
-        footer={<Button variant="outline" onClick={() => setConfigKey(null)}>完成</Button>}
+        open={groupOpen}
+        onClose={closeGroup}
+        title="分组设置"
+        footer={
+          <>
+            <div className="mr-auto flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => void duplicateSet()}>复制</Button>
+              <Button variant="ghost" size="sm" onClick={() => void deleteSet()}>删除</Button>
+            </div>
+            <Button variant="outline" onClick={closeGroup}>取消</Button>
+            <Button onClick={async () => { if (await save(form)) { groupSnapshot.current = null; setGroupOpen(false) } }} disabled={saving || !form.name.trim()}>保存</Button>
+          </>
+        }
       >
-        {configRule && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3.5 py-2.5">
-              <div>
-                <div className="text-sm font-medium">启用此规则</div>
-                <div className="text-xs text-foreground-subtle">关闭后保留在分组中，但检测时跳过</div>
-              </div>
-              <Switch checked={configRule.enabled} onCheckedChange={(v) => patchRule(configRule.ruleKey, { enabled: v })} />
+        <div className="space-y-4">
+          <label className="block space-y-1.5">
+            <Label>名称</Label>
+            <Input value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setDirty(true) }} />
+          </label>
+          <label className="block space-y-1.5">
+            <Label>说明</Label>
+            <Textarea rows={3} value={form.description} onChange={(e) => { setForm({ ...form, description: e.target.value }); setDirty(true) }} placeholder="可选" />
+          </label>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3.5 py-3">
+            <div>
+              <div className="text-sm font-medium">多页面模板检查</div>
+              <div className="mt-0.5 text-xs text-foreground-muted">按 sitemap 枚举并去重，同类模板只检测代表页。</div>
             </div>
-            <div className="space-y-1.5">
-              <Label>内容说明</Label>
-              <Input
-                value={configRule.description ?? ''}
-                onChange={(e) => patchRule(configRule.ruleKey, { description: e.target.value })}
-                placeholder="留空则使用检测结果动态描述"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>交付成果</Label>
-              <Input
-                value={configRule.deliverable ?? ''}
-                onChange={(e) => patchRule(configRule.ruleKey, { deliverable: e.target.value })}
-                placeholder="留空则使用预设文案"
-              />
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3.5 py-2.5">
-              <div>
-                <div className="text-sm font-medium">默认通过</div>
-                <div className="text-xs text-foreground-subtle">开启后直接按「通过」计，跳过实际检测</div>
-              </div>
-              <Switch
-                checked={configRule.params?.defaultPass === true}
-                onCheckedChange={(v) => patchRule(configRule.ruleKey, { params: { ...configRule.params, defaultPass: v } })}
-              />
-            </div>
+            <Switch checked={form.scanPages} onCheckedChange={(checked) => { setForm({ ...form, scanPages: checked }); setDirty(true) }} />
           </div>
-        )}
+        </div>
       </Dialog>
+
+      <Dialog
+        open={pickerOpen}
+        onClose={closePicker}
+        title="添加规则"
+        width="max-w-3xl"
+        footer={
+          <>
+            <span className="mr-auto self-center text-xs text-foreground-subtle">已选 {pickerKeys.size} 条</span>
+            <Button variant="outline" onClick={closePicker}>取消</Button>
+            <Button onClick={savePicker} disabled={saving}>保存并关闭</Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="flex gap-5 overflow-x-auto border-b border-border">
+            {pickerTabs.map((tab) => {
+              const active = pickerCategory === tab.key
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setPickerCategory(tab.key)}
+                  className={`-mb-px shrink-0 border-b-2 pb-2 text-xs font-medium transition-colors ${
+                    active
+                      ? 'border-primary text-foreground'
+                      : 'border-transparent text-foreground-muted hover:text-foreground'
+                  }`}
+                >
+                  {tab.label}
+                  <span className={`ml-1 tabular-nums ${active ? 'text-primary' : 'text-foreground-subtle'}`}>{pickerCounts[tab.key]}</span>
+                </button>
+              )
+            })}
+          </div>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-subtle" />
+            <Input value={pickerQuery} onChange={(e) => setPickerQuery(e.target.value)} placeholder="搜索规则名称或 key" className="h-8 pl-8 text-xs" />
+          </div>
+          {filteredCatalog.length === 0 ? (
+            <Empty title="没有匹配的规则" description="换个关键词试试。" />
+          ) : (
+            <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+              {filteredCatalog.map((item) => {
+                const selected = pickerKeys.has(item.ruleKey)
+                const rule = byKey.get(item.ruleKey)
+                const kind = rule?.kind ?? item.kind ?? 'check'
+                return (
+                  <label key={item.ruleKey} className={`flex cursor-pointer items-start gap-2.5 px-3 py-2.5 transition-colors ${selected ? 'bg-primary-soft/30' : 'hover:bg-black/[0.025] dark:hover:bg-white/[0.03]'}`}>
+                    <input type="checkbox" checked={selected} onChange={(e) => togglePickerRule(item.ruleKey, e.target.checked)} className="mt-1 h-4 w-4 accent-primary" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{item.name}</span>
+                        <span className="text-[11px] text-foreground-subtle">
+                          {categoryOf(kind) === 'functional' && kind === 'artifact' ? '截图产物' : kindMeta(kind).label}
+                        </span>
+                        {(rule?.scope ?? item.scope) === 'site' && <span className="text-[11px] text-foreground-subtle">站点级</span>}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-foreground-subtle">{item.description || item.ruleKey}</span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </Dialog>
+    </div>
+  )
+}
+
+function RuleItem({
+  rule,
+  open,
+  dragging,
+  dragOver,
+  dragOverAfter,
+  draggable,
+  onToggle,
+  onChange,
+  onRemove,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd
+}: {
+  rule: DraftRule
+  open: boolean
+  dragging: boolean
+  dragOver: boolean
+  dragOverAfter: boolean
+  draggable: boolean
+  onToggle: () => void
+  onChange: (patch: Partial<DraftRule>) => void
+  onRemove: () => void
+  onDragStart: () => void
+  onDragOver: (after: boolean) => void
+  onDrop: (after: boolean) => void
+  onDragEnd: () => void
+}) {
+  return (
+    <div
+      onDragOver={(event) => {
+        if (!draggable) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'move'
+        const rect = event.currentTarget.getBoundingClientRect()
+        onDragOver(event.clientY > rect.top + rect.height / 2)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        const rect = event.currentTarget.getBoundingClientRect()
+        onDrop(event.clientY > rect.top + rect.height / 2)
+      }}
+      onDragEnd={onDragEnd}
+      className={`relative transition-opacity ${dragging ? 'opacity-40' : ''} ${
+        dragOver
+          ? dragOverAfter
+            ? 'after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary'
+            : 'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-primary'
+          : ''
+      }`}
+    >
+      <div className={`flex items-start gap-1 px-2 py-3 transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.03] ${open ? 'bg-black/[0.015] dark:bg-white/[0.02]' : ''}`}>
+        <span
+          draggable={draggable}
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('text/plain', rule.ruleKey)
+            onDragStart()
+          }}
+          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded text-foreground-subtle ${
+            draggable ? 'cursor-grab active:cursor-grabbing' : 'opacity-30'
+          }`}
+          title={draggable ? '拖动调整顺序' : '清空搜索后可拖动排序'}
+          aria-hidden
+        >
+          <GripVertical className="h-4 w-4" />
+        </span>
+        <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 items-start gap-2 text-left" aria-expanded={open}>
+          <span className="mt-0.5 text-foreground-subtle">{open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">{rule.name}</span>
+              <span className="rounded bg-black/[0.05] px-1.5 py-0.5 text-[10px] text-foreground-muted dark:bg-white/[0.07]">
+                {kindMeta(rule.kind ?? 'check').label}
+              </span>
+              {rule.scope === 'site' && <span className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-medium text-primary-soft-foreground">站点级</span>}
+            </span>
+            <span className="mt-0.5 block truncate text-xs text-foreground-subtle">{rule.description || rule.ruleKey}</span>
+          </span>
+        </button>
+      </div>
+      {open && (
+        <div className="border-t border-border bg-black/[0.015] px-4 py-4 dark:bg-black/10">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5">
+              <Label>类型</Label>
+              <Select value={rule.kind ?? 'check'} onChange={(value) => onChange({ kind: value as RuleKind })} options={KIND_OPTIONS} className="w-full" />
+              <span className="block text-xs text-foreground-muted">{kindMeta(rule.kind ?? 'check').description}</span>
+            </label>
+            <label className="space-y-1.5">
+              <Label>说明</Label>
+              <Textarea rows={2} value={rule.description ?? ''} onChange={(e) => onChange({ description: e.target.value })} placeholder="留空使用默认说明" />
+            </label>
+          </div>
+          <label className="mt-4 block space-y-1.5">
+            <Label>交付成果</Label>
+            <Textarea rows={2} value={rule.deliverable ?? ''} onChange={(e) => onChange({ deliverable: e.target.value })} placeholder="留空使用预设文案" />
+          </label>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="font-mono text-[11px] text-foreground-subtle">{rule.ruleKey}</span>
+            <Button variant="ghost" size="sm" onClick={onRemove}><Trash2 className="h-3.5 w-3.5 text-danger" /> 移除</Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

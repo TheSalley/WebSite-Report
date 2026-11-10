@@ -1,10 +1,8 @@
 import { join } from 'path'
 import { mkdir } from 'fs/promises'
-import { statSync } from 'fs'
-import { DATA_DIR, getTask } from './store'
+import { DATA_DIR } from './store'
 import { getBrowser } from './engine/browser'
-import { logInfo, logWarn, logError } from './logger'
-import type { PageSpeedReportData, PageSpeedStrategyResult } from './types'
+import { logInfo, logWarn } from './logger'
 
 /** 取消检查：已取消则抛出，用于中断等待循环 */
 function throwIfCancelled(signal?: { cancelled: boolean }): void {
@@ -17,21 +15,10 @@ function shotsDir(taskId: number): string {
   return join(DATA_DIR, 'screenshots', 'task-' + taskId)
 }
 
-/** 检查某策略截图是否已存在 */
-async function shotExists(taskId: number, strategy: string): Promise<boolean> {
-  try {
-    const s = statSync(join(shotsDir(taskId), 'pagespeed-' + strategy + '.png'))
-    return s.size > 0
-  } catch {
-    return false
-  }
-}
-
 /**
  * 采集 pagespeed.web.dev 测速得分报告截图（移动端/桌面端）。
  * - 支持取消信号（等待/导航间隙及时中断）
  * - 得分卡片超时后仍会截取当前可视区域作为兜底
- * - web.dev 通道失败或超时后，用本地 pagespeed 数据渲染得分卡 HTML 截图，保证必有图
  */
 export async function capturePagespeedShots(
   taskId: number,
@@ -85,9 +72,9 @@ export async function capturePagespeedShots(
       throwIfCancelled(signal)
       if (state !== 'ready') {
         if (state === 'error') {
-          logWarn(`pagespeed.web.dev ${strategy} 提示无法解析网址（目标站可能拦截 Google 抓取），不保存错误页，改用本地评分数据渲染`, taskId)
+          logWarn(`pagespeed.web.dev ${strategy} 提示无法解析网址（目标站可能拦截 Google 抓取），不保存错误页`, taskId)
         } else {
-          logWarn(`pagespeed.web.dev ${strategy} 得分等待超时，不保存当前页面，改用本地评分数据渲染`, taskId)
+          logWarn(`pagespeed.web.dev ${strategy} 得分等待超时，不保存当前页面`, taskId)
         }
         return
       }
@@ -137,7 +124,7 @@ export async function capturePagespeedShots(
       await page.goto(baseTarget, { waitUntil: 'domcontentloaded', timeout: 30000 })
       webDevOpened = true
     } catch (e) {
-      logWarn(`打开 pagespeed.web.dev 失败（${(e as Error).message.split('\n')[0]}），跳过 web.dev 截图，改用本地评分数据渲染`, taskId)
+      logWarn(`打开 pagespeed.web.dev 失败（${(e as Error).message.split('\n')[0]}），跳过截图`, taskId)
     }
     if (webDevOpened && !signal?.cancelled) {
       try {
@@ -176,89 +163,4 @@ export async function capturePagespeedShots(
     await context.close().catch(() => undefined)
   }
 
-  // web.dev 通道结束后：缺失的截图用本地 pagespeed 数据渲染兜底
-  if (signal?.cancelled) return
-  try {
-    const raw = await getTask(taskId)
-    const pagespeed = raw?.pagespeedJson ? (JSON.parse(raw.pagespeedJson) as PageSpeedReportData | null) : null
-    for (const strategy of ['mobile', 'desktop'] as const) {
-      if (signal?.cancelled) return
-      if (await shotExists(taskId, strategy)) continue
-      const result = pagespeed?.[strategy]
-      if (result && result.ok) {
-        logWarn(`pagespeed.web.dev ${strategy} 截图缺失，用本地数据渲染兜底`, taskId)
-        await generateLocalScoreShot(taskId, url, strategy, result)
-      } else {
-        logWarn(`pagespeed.web.dev ${strategy} 截图缺失且无本地数据可兜底`, taskId)
-      }
-    }
-  } catch (e) {
-    logError('本地兜底截图失败', e, taskId)
-  }
-}
-
-/** 用本地 pagespeed 数据渲染一张得分报告卡 HTML 并截图（不依赖外网） */
-async function generateLocalScoreShot(
-  taskId: number,
-  url: string,
-  strategy: 'mobile' | 'desktop',
-  data: PageSpeedStrategyResult
-): Promise<void> {
-  const catHtml = (data.categories ?? [])
-    .map((c) => {
-      const score = c.score ?? 0
-      const color = score >= 90 ? '#059669' : score >= 50 ? '#d97706' : '#dc2626'
-      return `<div class="cat">
-        <div class="ring" style="border-color:${color};color:${color}">${score}</div>
-        <div class="cat-title">${c.title}</div>
-      </div>`
-    })
-    .join('')
-  const metricHtml = (data.metrics ?? [])
-    .map(
-      (m) => `<tr>
-        <td>${m.title}</td>
-        <td class="val">${m.displayValue || '—'}</td>
-        <td class="score" style="color:${m.score == null || m.score >= 90 ? '#059669' : m.score >= 50 ? '#d97706' : '#dc2626'}">${m.score ?? '—'}</td>
-      </tr>`
-    )
-    .join('')
-  const html = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="utf-8"><style>
-  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f1f5f9; margin: 0; padding: 32px; }
-  .card { background: #fff; border-radius: 16px; padding: 28px 32px; box-shadow: 0 4px 24px rgba(15,23,42,.08); max-width: 720px; margin: 0 auto; }
-  .head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; }
-  .head .title { font-size: 20px; font-weight: 700; color: #0f172a; }
-  .head .tag { font-size: 12px; color: #475569; background: #e2e8f0; padding: 4px 12px; border-radius: 999px; }
-  .cats { display: flex; gap: 16px; justify-content: space-between; margin: 24px 0; }
-  .cat { flex: 1; text-align: center; }
-  .ring { width: 84px; height: 84px; margin: 0 auto 8px; border: 10px solid; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; }
-  .cat-title { font-size: 12px; color: #475569; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 10px 8px; border-top: 1px solid #eef2f7; font-size: 13px; color: #334155; }
-  td.val { text-align: right; font-weight: 600; }
-  td.score { text-align: right; font-weight: 800; width: 44px; }
-  .foot { margin-top: 18px; font-size: 11px; color: #94a3b8; text-align: center; }
-</style></head>
-<body><div class="card">
-  <div class="head">
-    <div class="title">PageSpeed 得分报告</div>
-    <div class="tag">${strategy === 'mobile' ? '移动端' : '桌面端'}</div>
-  </div>
-  <div class="cats">${catHtml}</div>
-  <table>${metricHtml}</table>
-  <div class="foot">${url}</div>
-</div></body></html>`
-  const browser = await getBrowser()
-  const page = await browser.newPage({ viewport: { width: 860, height: 620 } })
-  try {
-    await page.setContent(html, { waitUntil: 'load' })
-    await new Promise((r) => setTimeout(r, 200))
-    const file = join(shotsDir(taskId), 'pagespeed-' + strategy + '.png')
-    await page.screenshot({ path: file })
-    logInfo(`本地兜底截图已保存: ${file}`, taskId)
-  } finally {
-    await page.close()
-  }
 }

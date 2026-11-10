@@ -30,7 +30,6 @@ export async function GET(request: Request) {
       startedAt: t.startedAt,
       finishedAt: t.finishedAt,
       error: t.error ?? null,
-      pagespeed: t.pagespeedJson ? JSON.parse(t.pagespeedJson) : null,
       pageSet: t.pageSetJson ? JSON.parse(t.pageSetJson) : null,
       siteData: t.siteDataJson ? JSON.parse(t.siteDataJson) : null,
       site: sites.get(t.siteId) ?? null,

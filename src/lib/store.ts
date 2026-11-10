@@ -26,6 +26,8 @@ export interface RuleRow {
   deliverable?: string
   /** 执行范围：'site' 站点级（整站仅执行一次）| 'page' 页面级（每个代表页执行，默认） */
   scope?: 'page' | 'site'
+  /** 规则类型：check 自动检测 | deliverable 合同文案 | artifact 功能产物 */
+  kind: 'check' | 'deliverable' | 'artifact'
   params: Record<string, unknown>
   sortOrder: number
 }
@@ -67,6 +69,8 @@ export interface CheckResultRow {
   ruleKey: string
   ruleName: string
   groupName: string
+  /** 结果类型：check 自动检测 | deliverable 合同文案 | artifact 功能产物 */
+  kind: 'check' | 'deliverable' | 'artifact'
   pageUrl: string
   status: 'pass' | 'warn' | 'fail' | 'skip' | 'verify'
   actualValue: string
@@ -245,10 +249,10 @@ export async function duplicateRuleSet(id: number, newName: string): Promise<Rul
     const max = sqlite.prepare('SELECT MAX(id) AS m FROM rules').get() as SqlRow
     let nextId = Number(max.m ?? 0)
     const insert = sqlite.prepare(
-      'INSERT INTO rules (id, ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, scope, params, sortOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO rules (id, ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, scope, kind, params, sortOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     for (const r of srcRules) {
-      insert.run(++nextId, newId, str(r.groupName), str(r.ruleKey), str(r.name), bool(r.enabled) ? 1 : 0, strOrNull(r.description), strOrNull(r.deliverable), strOrNull(r.scope) || 'page', str(r.params), num(r.sortOrder))
+      insert.run(++nextId, newId, str(r.groupName), str(r.ruleKey), str(r.name), bool(r.enabled) ? 1 : 0, strOrNull(r.description), strOrNull(r.deliverable), strOrNull(r.scope) || 'page', strOrNull(r.kind) || 'check', str(r.params), num(r.sortOrder))
     }
     sqlite.exec('COMMIT')
     return getRuleSet(newId)
@@ -272,6 +276,7 @@ export async function listRules(): Promise<RuleRow[]> {
     description: strOrNull(r.description) ?? undefined,
     deliverable: strOrNull(r.deliverable) ?? undefined,
     scope: (str(r.scope) || 'page') as 'page' | 'site',
+    kind: (str(r.kind) || (str(r.ruleKey).startsWith('verify.') ? 'deliverable' : str(r.ruleKey).startsWith('artifact.') ? 'artifact' : 'check')) as RuleRow['kind'],
     params: JSON.parse(str(r.params) || '{}') as Record<string, unknown>,
     sortOrder: num(r.sortOrder)
   }))
@@ -291,6 +296,7 @@ export async function listRulesForSet(ruleSetId: number): Promise<RuleRow[]> {
     description: strOrNull(r.description) ?? undefined,
     deliverable: strOrNull(r.deliverable) ?? undefined,
     scope: (str(r.scope) || 'page') as 'page' | 'site',
+    kind: (str(r.kind) || (str(r.ruleKey).startsWith('verify.') ? 'deliverable' : str(r.ruleKey).startsWith('artifact.') ? 'artifact' : 'check')) as RuleRow['kind'],
     params: JSON.parse(str(r.params) || '{}') as Record<string, unknown>,
     sortOrder: num(r.sortOrder)
   }))
@@ -309,6 +315,7 @@ export async function replaceRules(
       ...r,
       id: r.id ?? maxId + 1 + idx,
       ruleSetId,
+      kind: (r.kind ?? (r.ruleKey.startsWith('verify.') ? 'deliverable' : r.ruleKey.startsWith('artifact.') ? 'artifact' : 'check')) as RuleRow['kind'],
       deliverable: r.deliverable && r.deliverable.trim() ? r.deliverable : preset ?? ''
     }
   })
@@ -317,10 +324,10 @@ export async function replaceRules(
   try {
     sqlite.prepare('DELETE FROM rules WHERE ruleSetId = ?').run(ruleSetId)
     const insert = sqlite.prepare(
-      'INSERT INTO rules (id, ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, scope, params, sortOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO rules (id, ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, scope, kind, params, sortOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     for (const r of assigned) {
-      insert.run(r.id, r.ruleSetId, r.groupName, r.ruleKey, r.name, r.enabled ? 1 : 0, r.description ?? null, r.deliverable ?? null, r.scope ?? 'page', JSON.stringify(r.params ?? {}), r.sortOrder)
+      insert.run(r.id, r.ruleSetId, r.groupName, r.ruleKey, r.name, r.enabled ? 1 : 0, r.description ?? null, r.deliverable ?? null, r.scope ?? 'page', r.kind ?? 'check', JSON.stringify(r.params ?? {}), r.sortOrder)
     }
     sqlite.exec('COMMIT')
   } catch (err) {
@@ -427,9 +434,27 @@ export async function recoverStaleRunningTasks(activeIds: number[]): Promise<num
 // ── 检测结果 ──
 
 export async function listCheckResults(taskId: number): Promise<CheckResultRow[]> {
-  return getDb()
+  const rows = getDb()
     .prepare('SELECT * FROM check_results WHERE taskId = ? ORDER BY id')
-    .all(taskId) as unknown as CheckResultRow[]
+    .all(taskId) as SqlRow[]
+  return rows.map((r) => ({
+    id: num(r.id),
+    taskId: num(r.taskId),
+    ruleId: r.ruleId == null ? null : num(r.ruleId),
+    ruleKey: str(r.ruleKey),
+    ruleName: str(r.ruleName),
+    groupName: str(r.groupName),
+    kind: (str(r.kind) || (str(r.status) === 'verify' ? 'deliverable' : str(r.ruleKey).startsWith('artifact.') ? 'artifact' : 'check')) as CheckResultRow['kind'],
+    pageUrl: str(r.pageUrl),
+    status: str(r.status) as CheckResultRow['status'],
+    actualValue: str(r.actualValue),
+    expectedValue: str(r.expectedValue),
+    description: str(r.description),
+    deliverable: strOrNull(r.deliverable) ?? undefined,
+    screenshotPath: strOrNull(r.screenshotPath),
+    note: str(r.note),
+    checkedAt: str(r.checkedAt)
+  }))
 }
 
 export async function saveCheckResults(taskId: number, results: Omit<CheckResultRow, 'id'>[]): Promise<void> {
@@ -438,11 +463,11 @@ export async function saveCheckResults(taskId: number, results: Omit<CheckResult
   try {
     sqlite.prepare('DELETE FROM check_results WHERE taskId = ?').run(taskId)
     const insert = sqlite.prepare(
-      `INSERT INTO check_results (taskId, ruleId, ruleKey, ruleName, groupName, pageUrl, status, actualValue, expectedValue, description, deliverable, screenshotPath, note, checkedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO check_results (taskId, ruleId, ruleKey, ruleName, groupName, kind, pageUrl, status, actualValue, expectedValue, description, deliverable, screenshotPath, note, checkedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     for (const r of results) {
-      insert.run(taskId, r.ruleId, r.ruleKey, r.ruleName, r.groupName, r.pageUrl ?? '', r.status, r.actualValue, r.expectedValue, r.description, r.deliverable ?? null, r.screenshotPath, r.note, r.checkedAt)
+      insert.run(taskId, r.ruleId, r.ruleKey, r.ruleName, r.groupName, r.kind ?? (r.status === 'verify' ? 'deliverable' : r.ruleKey.startsWith('artifact.') ? 'artifact' : 'check'), r.pageUrl ?? '', r.status, r.actualValue, r.expectedValue, r.description, r.deliverable ?? null, r.screenshotPath, r.note, r.checkedAt)
     }
     sqlite.exec('COMMIT')
   } catch (err) {
