@@ -500,7 +500,7 @@ export default function RulesPage() {
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3.5 py-3">
             <div>
               <div className="text-sm font-medium">多页面模板检查</div>
-              <div className="mt-0.5 text-xs text-foreground-muted">按 sitemap 枚举并去重，同类模板只检测代表页。</div>
+              <div className="mt-0.5 text-xs text-foreground-muted">按 sitemap 枚举并为页面级规则去重模板；H1 / 隐藏板块始终按 sitemap 全部页面、新闻、产品逐页检查。</div>
             </div>
             <Switch checked={form.scanPages} onCheckedChange={(checked) => { setForm({ ...form, scanPages: checked }); setDirty(true) }} />
           </div>

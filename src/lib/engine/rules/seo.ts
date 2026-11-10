@@ -1,4 +1,6 @@
 import type { RuleHandler } from '../types'
+import { collectSitemapGroups, countSitemapContent, getSitemapUrls, WP_SITEMAP_PATH } from '../page-set'
+import { displayUrl } from '../../display'
 
 export const seoRules: Record<string, RuleHandler> = {
   'seo.title.exists': async ({ snapshot }) => {
@@ -76,21 +78,48 @@ export const seoRules: Record<string, RuleHandler> = {
 
   'seo.sitemap.xml': async ({ snapshot, request }) => {
     try {
-      const res = await request!.get(new URL('/sitemap.xml', snapshot.finalUrl).toString(), { timeout: 8000 })
-      const raw = await res.text()
-      const ok = res.ok() && /<urlset|<url>/i.test(raw)
-      return {
-        status: ok ? 'pass' : 'warn',
-        actual: `HTTP ${res.status()}`,
-        expected: 'sitemap.xml 可访问',
-        description: ok ? '站点地图正常' : 'sitemap.xml 不存在或为空'
+      const origin = new URL(snapshot.finalUrl).origin
+      // 优先复用 Playwright 请求上下文（带浏览器 UA/重定向），保持与页面访问一致
+      const fetchSitemap = request
+        ? async (url: string): Promise<string> => {
+            const res = await request.get(url, { timeout: 8000 })
+            if (!res.ok()) throw new Error(`HTTP ${res.status()}`)
+            return res.text()
+          }
+        : undefined
+      const sitemaps = getSitemapUrls(origin)
+      const groups = await collectSitemapGroups(sitemaps, 0, fetchSitemap)
+      const locTotal = groups.reduce((n, g) => n + g.locs.length, 0)
+      if (locTotal === 0) {
+        return {
+          status: 'warn',
+          actual: `${WP_SITEMAP_PATH} 无有效 URL`,
+          expected: 'Sitemap 可访问且非空',
+          description: `请求 ${WP_SITEMAP_PATH} 失败，或未提取到有效 URL`
+        }
       }
-    } catch {
+      const counts = countSitemapContent(groups)
+      const relevantTotal = counts.pages + counts.posts + counts.products
+      if (relevantTotal === 0) {
+        return {
+          status: 'warn',
+          actual: '未找到页面/新闻/产品',
+          expected: 'Sitemap 包含页面/新闻/产品 URL',
+          description: `请求 ${WP_SITEMAP_PATH} 成功，但未识别到页面/新闻/产品的 URL`
+        }
+      }
+      return {
+        status: 'pass',
+        actual: `页面 ${counts.pages}、新闻 ${counts.posts}、产品 ${counts.products}`,
+        expected: 'Sitemap 可访问且包含页面/新闻/产品内容',
+        description: `已发现 Sitemap：${sitemaps.map(displayUrl).join('、')}；页面 ${counts.pages}、新闻 ${counts.posts}、产品 ${counts.products}`
+      }
+    } catch (e) {
       return {
         status: 'warn',
         actual: '请求失败',
-        expected: 'sitemap.xml 可访问',
-        description: '无法访问 sitemap.xml'
+        expected: 'Sitemap 可访问',
+        description: `无法访问 ${WP_SITEMAP_PATH}：${(e as Error).message.slice(0, 80)}`
       }
     }
   },

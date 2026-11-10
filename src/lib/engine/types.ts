@@ -1,5 +1,5 @@
 import type { Page, APIRequestContext } from 'playwright'
-import type { ElementorHiddenItem } from '../types'
+import type { ElementorHiddenItem, SitemapContentCounts } from '../types'
 
 /** 页面快照：一次浏览器检测采集到的全部原始数据，供所有规则共享 */
 export interface PageSnapshot {
@@ -55,8 +55,9 @@ export interface RuleContext {
     sitemaps: string[]
     locTotal: number
     candidateCount: number
+    contentCounts?: SitemapContentCounts
   }
-  /** 全部代表页的成功快照（站点级聚合规则使用，如全站 H1/Elementor 汇总） */
+  /** 逐页采集成功的快照（页面级规则页面 + H1/隐藏板块补充的内容链接） */
   pageSnapshots?: { url: string; snapshot: PageSnapshot }[]
   /** 规则参数（可配置） */
   params: Record<string, unknown>

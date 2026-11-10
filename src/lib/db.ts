@@ -134,6 +134,8 @@ export function getDb(): DatabaseSync {
     ensureCompatColumns(db)
     migrateFromJson(db)
     migratePagespeedScoreToShots(db)
+    migrateWpSitemapLabels(db)
+    migrateDeliveryRuleSetDescription(db)
     removeDefaultPassBypass(db)
     migrateLogsFromFiles(db)
     // PSI API Key 配置已下线：清理历史遗留密钥
@@ -395,6 +397,59 @@ function migratePagespeedScoreToShots(sqlite: DatabaseSync): void {
   sqlite.exec('COMMIT')
 }
 
+/**
+ * Sitemap 规则已改为统一读取 wp-sitemap.xml，并只统计页面/新闻/产品。
+ * 仅在规则名/交付文案仍是旧内置默认值时更新，避免覆盖用户自定义。
+ */
+function migrateWpSitemapLabels(sqlite: DatabaseSync): void {
+  const marker = 'migration.wpSitemapLabels.v1'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+  const updName = sqlite.prepare('UPDATE rules SET name = ? WHERE ruleKey = ? AND name = ?')
+  const updDeliverable = sqlite.prepare('UPDATE rules SET deliverable = ? WHERE ruleKey = ? AND deliverable = ?')
+  sqlite.exec('BEGIN')
+  try {
+    updName.run('SEO：wp-sitemap.xml 可访问', 'seo.sitemap.xml', 'SEO：sitemap.xml 可访问')
+    updDeliverable.run('站点地图可正常访问（含页面/新闻/产品）', 'seo.sitemap.xml', 'sitemap.xml 可正常访问')
+    updName.run('Sitemap 检查（wp-sitemap.xml 可访问/有效）', 'delivery.sitemap', 'Sitemap 检查（robots 声明/可访问/有效）')
+    updDeliverable.run(
+      '已配置站点地图（wp-sitemap.xml 可访问，含页面/新闻/产品）',
+      'delivery.sitemap',
+      '已配置并提交站点地图（robots.txt 声明 Sitemap 且可访问、非空）'
+    )
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
+
+
+/**
+ * 同步交付规则集的说明文案：H1 / 隐藏板块已改为按 wp-sitemap.xml 内容链接逐页检查。
+ * 仅当说明仍是旧内置默认值时更新，避免覆盖用户自定义文案。
+ */
+function migrateDeliveryRuleSetDescription(sqlite: DatabaseSync): void {
+  const marker = 'migration.deliveryRuleSetDescription.v2'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+  const oldText =
+    '网站交付前的质量检查：验证代表页面 H1 标题存在且唯一，扫描 Elementor 板块是否残留同时隐藏于桌面与移动端的元素；默认按 sitemap 枚举整站页面并按模板去重（新闻/产品等模板页只测代表页）。'
+  const newText =
+    '网站交付前的质量检查：验证 H1 标题存在且唯一，扫描 Elementor 板块是否残留同时隐藏于桌面与移动端的元素；H1 与隐藏板块按 wp-sitemap.xml 的页面/新闻/产品链接逐页检查，其他页面级规则按模板去重取代表页。'
+  sqlite.exec('BEGIN')
+  try {
+    sqlite
+      .prepare('UPDATE rule_sets SET description = ? WHERE name = ? AND description = ?')
+      .run(newText, '网站交付检查', oldText)
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
 
 function migrateFromJson(sqlite: DatabaseSync): void {
   importJsonList(sqlite, 'sites', 'sites.json', ['id', 'name', 'url', 'remark', 'createdAt', 'updatedAt'], (r) => [

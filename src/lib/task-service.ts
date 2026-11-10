@@ -60,6 +60,9 @@ export interface RunningTaskState {
 
 const runningTasks = new Map<number, RunningTaskState>()
 
+/** 需要按 sitemap 内容链接逐页检查的站点级规则（H1、Elementor 隐藏板块） */
+const CONTENT_SNAPSHOT_RULE_KEYS = new Set(['delivery.h1.count', 'delivery.elementor.hidden-both'])
+
 /** 功能产物结果（如 PageSpeed 截图）：与检测结果同表保存，但不参与通过/失败统计 */
 function artifactResult(
   rule: RuleRow,
@@ -238,9 +241,14 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
     const hasDetection = checkRules.length > 0
     const shotRule = rules.find((r) => r.ruleKey === 'artifact.pagespeed.shots')
     const hasPagespeedShot = Boolean(shotRule)
+    const needsContentSnapshots = checkRules.some((r) => CONTENT_SNAPSHOT_RULE_KEYS.has(r.ruleKey))
+    const pageRuleCount = checkRules.filter((r) => r.scope !== 'site').length
+    // 没有页面级规则时无需模板代表页；H1/隐藏板块直接按 sitemap 内容链接逐页检查
+    const collectRepresentatives = scanPages && pageRuleCount > 0
+    const shouldEnumerate = hasDetection && (scanPages || needsContentSnapshots)
     // 阶段序列：枚举 → 规则检测 → PageSpeed 截图（按规则集配置裁剪）
     const phases: TaskPhase[] = []
-    if (hasDetection && scanPages) phases.push({ id: 'enum', name: '枚举站点页面', done: 0, total: 0 })
+    if (shouldEnumerate) phases.push({ id: 'enum', name: '枚举站点页面', done: 0, total: 0 })
     if (hasDetection) phases.push({ id: 'detect', name: '规则检测', done: 0, total: 0 })
     if (hasPagespeedShot) phases.push({ id: 'pagespeed', name: 'PageSpeed 截图', done: 0, total: 0 })
     state.phaseCount = phases.length
@@ -259,13 +267,15 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
       state.lastStatus = null
     }
 
-    // 多页面模板检查：sitemap 枚举 + 模板去重，仅检测代表页
+    // sitemap 枚举：H1/隐藏板块按内容链接逐页检查；多页面模板规则按代表页检查
     let pages: string[] = [url]
+    let snapshotPages: string[] | undefined
     let pageSetResult: PageSetResult | undefined
-    if (hasDetection && scanPages) {
+    if (shouldEnumerate) {
       enterPhase('enum', '枚举站点页面', 0, 0)
       pageSetResult = await buildPageSet(url, {
         signal: state.signal,
+        collectRepresentatives,
         onClassify: (doneCount, totalCount) => {
           state.done = doneCount
           state.total = totalCount
@@ -274,13 +284,23 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
           state.lastStatus = null
         }
       })
-      pages = pageSetResult.pages.map((i) => i.url)
-      logInfo('页面集合（sitemap 枚举 + 模板去重）：' + pages.length + ' 个代表页', taskId)
+      pages = collectRepresentatives ? pageSetResult.pages.map((i) => i.url) : [url]
+      if (needsContentSnapshots) snapshotPages = pageSetResult.contentPages
+      logInfo(
+        '页面集合（wp-sitemap.xml）：' +
+          pageSetResult.contentPages.length +
+          ' 个内容链接' +
+          (collectRepresentatives ? '，' + pages.length + ' 个代表页' : ''),
+        taskId
+      )
       await updateTask(taskId, {
         pageSetJson: JSON.stringify({
           sitemaps: pageSetResult.sitemaps,
           candidateCount: pageSetResult.candidateCount,
           locTotal: pageSetResult.locTotal,
+          contentCounts: pageSetResult.contentCounts,
+          contentPageCount: pageSetResult.contentPages.length,
+          contentCheck: Boolean(snapshotPages),
           representatives: pageSetResult.pages.map((p) => ({ url: p.url, templateSignature: p.templateSignature }))
         })
       })
@@ -291,7 +311,12 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
       }
       // 站点级规则整站只跑 1 次，页面级规则按代表页执行
       const siteCount = checkRules.filter((r) => r.scope === 'site').length
-      enterPhase('detect', '规则检测', 0, siteCount + (checkRules.length - siteCount) * pages.length)
+      enterPhase(
+        'detect',
+        '规则检测',
+        0,
+        siteCount + (checkRules.length - siteCount) * pages.length + (snapshotPages?.length ?? 0)
+      )
     } else if (hasDetection) {
       enterPhase('detect', '规则检测', 0, checkRules.length)
     }
@@ -300,10 +325,16 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
     if (hasDetection) {
       result = await runTask({
         pages,
+        snapshotPages,
         rules: checkRules,
         taskId,
         sitePageSet: pageSetResult
-          ? { sitemaps: pageSetResult.sitemaps, locTotal: pageSetResult.locTotal, candidateCount: pageSetResult.candidateCount }
+          ? {
+              sitemaps: pageSetResult.sitemaps,
+              locTotal: pageSetResult.locTotal,
+              candidateCount: pageSetResult.candidateCount,
+              contentCounts: pageSetResult.contentCounts
+            }
           : undefined,
         screenshotBaseDir: join(DATA_DIR, 'screenshots'),
         signal: state.signal,

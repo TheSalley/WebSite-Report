@@ -27,7 +27,7 @@ export interface RuleSet {
   description: string
   isBuiltin: boolean
   parentId: number | null
-  /** 多页面模板检查：sitemap 枚举 + 模板去重，任务运行代表页 */
+  /** 页面级规则的多页面检查：sitemap 枚举 + 模板去重；H1/隐藏板块始终按 sitemap 内容链接逐页检查 */
   scanPages: boolean
   createdAt: string
   updatedAt: string
@@ -118,14 +118,27 @@ export interface TaskPageSetPage {
   templateSignature: string
 }
 
+/** sitemap 内容计数：只统计页面、新闻（post）、产品 */
+export interface SitemapContentCounts {
+  pages: number
+  posts: number
+  products: number
+}
+
 /** 检测页面集合（sitemap 枚举 + 模板去重结果） */
 export interface TaskPageSet {
   /** 枚举到的 sitemap URL */
   sitemaps: string[]
   /** 候选页总数（含主页） */
   candidateCount: number
-  /** sitemap 中提取到的全部 URL 总数 */
+  /** sitemap 中提取到的全部 URL 总数（含 taxonomy、用户等其他类型） */
   locTotal: number
+  /** 页面/新闻/产品数量（taxonomy、用户、其他 CPT 不计入） */
+  contentCounts?: SitemapContentCounts
+  /** 按 sitemap 内容链接逐页检查的数量（H1、隐藏板块使用） */
+  contentPageCount?: number
+  /** 本次任务是否按 sitemap 内容链接逐页采集了快照（H1 / 隐藏板块） */
+  contentCheck?: boolean
   /** 去重后的代表页（主页优先） */
   representatives: TaskPageSetPage[]
 }

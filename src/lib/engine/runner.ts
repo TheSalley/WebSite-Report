@@ -7,14 +7,16 @@ import { countResults, type ResultCounts } from './scoring'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { PageSnapshot, RuleContext, RuleOutcome } from './types'
-import type { CheckStatus, SiteDataByRuleKey } from '../types'
+import type { CheckStatus, SiteDataByRuleKey, SitemapContentCounts } from '../types'
 import { logInfo, logWarn, logError } from '../logger'
 
 export interface RunTaskOptions {
   /** 页面集合（有序，pages[0] 为站点主页） */
   pages: string[]
   /** 页面枚举阶段已采集的站点级数据（供站点级规则使用，避免重复抓取 sitemap） */
-  sitePageSet?: { sitemaps: string[]; locTotal: number; candidateCount: number }
+  sitePageSet?: { sitemaps: string[]; locTotal: number; candidateCount: number; contentCounts?: SitemapContentCounts }
+  /** 额外逐页采集快照的 URL（只采集、不执行页面级规则；供 H1/隐藏板块等站点级规则使用） */
+  snapshotPages?: string[]
   rules: { id: number; ruleKey: string; name: string; groupName: string; enabled: boolean; description?: string; deliverable?: string; scope?: 'page' | 'site'; kind?: 'check' | 'deliverable' | 'artifact'; params: Record<string, unknown> }[]
   taskId: number
   /** 截图根目录（默认临时目录 web-report-screenshots） */
@@ -55,6 +57,32 @@ export interface RunResult {
 
 type RuleDef = RunTaskOptions['rules'][number]
 
+/** 去重键：忽略 www、hash、query 与末尾斜杠 */
+function urlKey(raw: string): string {
+  try {
+    const u = new URL(raw)
+    u.hash = ''
+    u.search = ''
+    u.hostname = u.hostname.toLowerCase().replace(/^www\./, '')
+    return u.toString().replace(/\/+$/, '')
+  } catch {
+    return raw.trim()
+  }
+}
+
+/** 计算需要额外采集快照的页面（排除 pages 中已包含的 URL） */
+function extraSnapshotPages(pages: string[], requested: string[]): string[] {
+  const seen = new Set(pages.map(urlKey))
+  const out: string[] = []
+  for (const url of requested) {
+    const key = urlKey(url)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(url)
+  }
+  return out
+}
+
 /**
  * 执行一次完整检测任务（可覆盖多个页面）：
  * 1. 逐页打开浏览器并按规则检测
@@ -69,12 +97,16 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
   // 站点级规则（整站检查）仅在任务中执行一次；页面级规则按代表页执行
   const siteRules = enabledRules.filter((r) => r.scope === 'site')
   const pageRules = enabledRules.filter((r) => r.scope !== 'site')
-  const total = siteRules.length + pageRules.length * pages.length
+  const snapshotExtra = extraSnapshotPages(pages, options.snapshotPages ?? [])
+  const total = siteRules.length + pageRules.length * pages.length + snapshotExtra.length
   let done = 0
   const siteData: SiteDataByRuleKey = {}
   const pageSnapshots: { url: string; snapshot: PageSnapshot }[] = []
 
-  logInfo(`开始检测任务 taskId=${taskId} 页面数=${pages.length} 启用规则数=${enabledRules.length}（共 ${total} 项）`, taskId)
+  logInfo(
+    `开始检测任务 taskId=${taskId} 页面数=${pages.length} 补充快照=${snapshotExtra.length} 启用规则数=${enabledRules.length}（共 ${total} 项）`,
+    taskId
+  )
   const baseDir = options.screenshotBaseDir ?? join(tmpdir(), 'web-report-screenshots')
   const screenshotManager = new ScreenshotManager(taskId, baseDir)
   const results: RunRuleResult[] = []
@@ -210,6 +242,28 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
       }
     } finally {
       await page.context().close().catch(() => undefined)
+    }
+  }
+
+  // 站点级聚合规则的补充页面（如 H1 / 隐藏板块按 sitemap 全量检查）：只采集快照，不执行页面级规则
+  for (let si = 0; si < snapshotExtra.length; si++) {
+    if (options.signal?.cancelled) {
+      logWarn(`任务取消信号已置位，跳过剩余补充页面（${si + 1}/${snapshotExtra.length}）`, taskId)
+      break
+    }
+    const url = snapshotExtra[si]
+    const page = await newPage()
+    attachNetworkCollector(page)
+    try {
+      await page.goto(url, { waitUntil: 'load', timeout: 45000 })
+      const snapshot = await captureSnapshot(page)
+      pageSnapshots.push({ url: snapshot.finalUrl || url, snapshot })
+    } catch (e) {
+      logWarn(`补充页面快照失败，跳过：${url}（${(e as Error).message.slice(0, 80)}）`, taskId)
+    } finally {
+      await page.context().close().catch(() => undefined)
+      done++
+      options.onProgress?.(done, total, '采集页面快照', 'page-snapshot', 'pass')
     }
   }
 

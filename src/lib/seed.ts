@@ -48,7 +48,7 @@ const contractRuleDefs: SeedRule[] = [
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.title.exists', name: 'SEO：title 标签存在且非空', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.meta.description', name: 'SEO：meta description 存在', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.robots.txt', name: 'SEO：robots.txt 可访问', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
-  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.sitemap.xml', name: 'SEO：sitemap.xml 可访问', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
+  { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.sitemap.xml', name: 'SEO：wp-sitemap.xml 可访问', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'artifact.pagespeed.shots', name: 'PageSpeed 得分截图（移动端/桌面端）', description: '保存 pagespeed.web.dev 得分报告截图，作为报告中的性能证据；仅生成截图，不改变规则通过状态', kind: 'artifact' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'seo.h1.exists', name: 'SEO：唯一 h1 标题', description: '提供一站式智能优化组件，覆盖站内SEO核心环节，有效提升网站在搜索引擎中的收录效率与排名表现' },
   { groupName: GROUP_OPTIMIZE, ruleKey: 'verify.optimize.html', name: 'HTML 优化（URL/Title/H1/Alt/Meta 自定义）', description: '支持自定义URL、Title、H1、图片Alt和Meta描述', kind: 'deliverable' },
@@ -83,7 +83,7 @@ const contractRuleDefs: SeedRule[] = [
 
 /** 网站交付检查规则：交付前质量检查，全部由引擎自动检测 */
 const deliveryRuleDefs: SeedRule[] = [
-  { groupName: GROUP_DELIVERY_SITE, ruleKey: 'delivery.sitemap', name: 'Sitemap 检查（robots 声明/可访问/有效）', scope: 'site' },
+  { groupName: GROUP_DELIVERY_SITE, ruleKey: 'delivery.sitemap', name: 'Sitemap 检查（wp-sitemap.xml 可访问/有效）', scope: 'site' },
   { groupName: GROUP_DELIVERY_PAGE, ruleKey: 'delivery.h1.count', name: 'H1 标签检查（全站页面汇总）', scope: 'site' },
   { groupName: GROUP_DELIVERY_ELEMENTOR, ruleKey: 'delivery.elementor.hidden-both', name: 'Elementor 隐藏板块检查（全站页面汇总）', scope: 'site' }
 ]
@@ -105,7 +105,7 @@ export const BUILTIN_RULE_SETS: BuiltinRuleSetDef[] = [
   },
   {
     name: '网站交付检查',
-    description: '网站交付前的质量检查：验证代表页面 H1 标题存在且唯一，扫描 Elementor 板块是否残留同时隐藏于桌面与移动端的元素；默认按 sitemap 枚举整站页面并按模板去重（新闻/产品等模板页只测代表页）。',
+    description: '网站交付前的质量检查：验证 H1 标题存在且唯一，扫描 Elementor 板块是否残留同时隐藏于桌面与移动端的元素；H1 与隐藏板块按 wp-sitemap.xml 的页面/新闻/产品链接逐页检查，其他页面级规则按模板去重取代表页。',
     scanPages: true,
     rules: deliveryRuleDefs
   }
@@ -205,7 +205,7 @@ export const DELIVERABLE_PRESETS: Record<string, string> = {
   'seo.title.exists': 'Title 标签已配置',
   'seo.meta.description': 'Meta Description 已配置',
   'seo.robots.txt': 'robots.txt 可正常访问',
-  'seo.sitemap.xml': 'sitemap.xml 可正常访问',
+  'seo.sitemap.xml': '站点地图可正常访问（含页面/新闻/产品）',
   'seo.h1.exists': 'H1 标题唯一且已配置',
   'verify.optimize.html': 'URL/Title/H1/Alt/Meta 已完成自定义优化',
   'verify.optimize.server': 'AWS 海外服务器已交付（2vCPU/8GB/20GB）',
@@ -229,7 +229,7 @@ export const DELIVERABLE_PRESETS: Record<string, string> = {
   'verify.support.content': '提供上线内容技术支持',
   'verify.support.rollback': '提供免费数据回滚 1 次',
   'verify.support.source': '提供免费源代码移交 1 次',
-  'delivery.sitemap': '已配置并提交站点地图（robots.txt 声明 Sitemap 且可访问、非空）',
+  'delivery.sitemap': '已配置站点地图（wp-sitemap.xml 可访问，含页面/新闻/产品）',
   'delivery.h1.count': '每页 H1 标签唯一且已设置',
   'artifact.pagespeed.shots': '已生成 PageSpeed 移动端/桌面端得分截图',
   'delivery.elementor.hidden-both': '已清理同时隐藏于桌面与移动端的 Elementor 板块'

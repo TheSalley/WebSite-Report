@@ -1,7 +1,38 @@
-import type { RuleHandler } from '../types'
-import { discoverSitemapUrls, collectSitemapLocsGrouped } from '../page-set'
+import type { RuleHandler, RuleOutcome } from '../types'
+import { getSitemapUrls, collectSitemapGroups, countSitemapContent, WP_SITEMAP_PATH } from '../page-set'
 import { displayUrl, pagePathShort } from '../../display'
-import type { ElementorHiddenItem } from '../../types'
+import type { ElementorHiddenItem, SitemapContentCounts } from '../../types'
+
+function describeContentCounts(counts: SitemapContentCounts): string {
+  return `页面 ${counts.pages}、新闻 ${counts.posts}、产品 ${counts.products}`
+}
+
+/** sitemap 检查统一输出：只统计页面/新闻/产品，taxonomy、用户等其他 sitemap 不计入 */
+function sitemapCountResult(counts: SitemapContentCounts, locTotal: number, sitemaps: string[]): RuleOutcome {
+  if (locTotal === 0) {
+    return {
+      status: 'fail',
+      actual: '0 个 URL',
+      expected: 'Sitemap 可访问且非空',
+      description: `请求 ${WP_SITEMAP_PATH} 失败，或未提取到有效 URL：${sitemaps.map(displayUrl).join('、')}`
+    }
+  }
+  const relevantTotal = counts.pages + counts.posts + counts.products
+  if (relevantTotal === 0) {
+    return {
+      status: 'fail',
+      actual: '未找到页面/新闻/产品',
+      expected: 'Sitemap 包含页面/新闻/产品 URL',
+      description: `请求 ${WP_SITEMAP_PATH} 成功，但未识别到页面/新闻/产品的 URL：${sitemaps.map(displayUrl).join('、')}`
+    }
+  }
+  return {
+    status: 'pass',
+    actual: describeContentCounts(counts),
+    expected: 'Sitemap 可访问且包含页面/新闻/产品内容',
+    description: `已发现 Sitemap：${sitemaps.map(displayUrl).join('、')}；${describeContentCounts(counts)}`
+  }
+}
 
 /** 单条 Elementor 隐藏板块的展示文本（规则描述与报告明细表共用） */
 export function describeElementorItem(e: ElementorHiddenItem): string {
@@ -20,8 +51,8 @@ export const deliveryRules: Record<string, RuleHandler> = {
       return {
         status: 'fail',
         actual: '无页面数据',
-        expected: '至少 1 个代表页可检测',
-        description: '未采集到任何代表页面快照，无法汇总 H1'
+        expected: '至少 1 个 sitemap 内容页面可检测',
+        description: '未采集到任何页面快照（sitemap 无页面/新闻/产品链接或页面加载失败），无法汇总 H1'
       }
     }
     const missing = pages.filter((p) => p.snapshot.h1s.length === 0).map((p) => pagePathShort(p.url))
@@ -62,23 +93,27 @@ export const deliveryRules: Record<string, RuleHandler> = {
       expected: '不存在同时含 elementor-hidden-desktop 与 elementor-hidden-mobile 的元素',
       description:
         n === 0
-          ? '所有代表页均未发现同时隐藏于桌面与移动端的 Elementor 板块'
+          ? '全部 sitemap 内容页面均未发现同时隐藏于桌面与移动端的 Elementor 板块'
           : `发现未删除的隐藏板块：${detail}${found.length > 8 ? ' 等' : ''}`,
       // 逐页明细（供报告按页面表格渲染）
       data: { pages: pages.map((p) => ({ url: p.url, items: p.snapshot.elementorHiddenBoth.slice(0, 5) })) }
     }
   },
 
-  /** 交付检查：Sitemap（站点级，仅执行一次）——robots.txt 声明、sitemap 可访问且含有效 URL */
+  /** 交付检查：Sitemap（站点级，仅执行一次）——WordPress wp-sitemap.xml 可访问且含有效 URL */
   'delivery.sitemap': async ({ snapshot, pageSet }) => {
     // 优先复用页面枚举阶段已采集的数据（整站检查不重复抓取，避免被源站限流）
     if (pageSet && pageSet.sitemaps) {
+      if (pageSet.contentCounts) {
+        return sitemapCountResult(pageSet.contentCounts, pageSet.locTotal, pageSet.sitemaps)
+      }
+      // 兼容旧任务数据：没有分类计数时退回总 URL 数
       if (pageSet.sitemaps.length === 0) {
         return {
           status: 'fail',
           actual: '未发现 sitemap',
-          expected: 'robots.txt 声明 Sitemap 且可访问',
-          description: 'robots.txt 未声明 Sitemap，常见路径（/sitemap.xml、/sitemap_index.xml）也未找到有效内容'
+          expected: 'Sitemap 可访问且非空',
+          description: `请求 ${WP_SITEMAP_PATH} 失败，或未提取到有效 URL`
         }
       }
       if (pageSet.locTotal === 0) {
@@ -86,44 +121,31 @@ export const deliveryRules: Record<string, RuleHandler> = {
           status: 'fail',
           actual: `${pageSet.sitemaps.length} 个 sitemap，0 个 URL`,
           expected: 'sitemap 至少包含 1 个有效 URL',
-          description: `已发现 ${pageSet.sitemaps.length} 个 sitemap 但均未提取到有效 URL：${pageSet.sitemaps.map(displayUrl).join('、')}`
+          description: `请求 ${WP_SITEMAP_PATH} 失败，或未提取到有效 URL：${pageSet.sitemaps.map(displayUrl).join('、')}`
         }
       }
       return {
         status: 'pass',
         actual: `${pageSet.sitemaps.length} 个 sitemap，共 ${pageSet.locTotal} 个 URL`,
-        expected: 'robots.txt 声明 Sitemap，可访问且非空',
-        description: `robots.txt 已声明 Sitemap：${pageSet.sitemaps.map(displayUrl).join('、')}，共 ${pageSet.locTotal} 个 URL`
+        expected: 'Sitemap 可访问且非空',
+        description: `已发现 Sitemap：${pageSet.sitemaps.map(displayUrl).join('、')}，共 ${pageSet.locTotal} 个 URL`
       }
     }
     // 回退：无枚举数据（如单页任务）时独立抓取校验
     try {
       const origin = new URL(snapshot.finalUrl).origin
-      const sitemaps = await discoverSitemapUrls(origin)
+      const sitemaps = getSitemapUrls(origin)
       if (sitemaps.length === 0) {
         return {
           status: 'fail',
           actual: '未发现 sitemap',
-          expected: 'robots.txt 声明 Sitemap 且可访问',
-          description: 'robots.txt 未声明 Sitemap，常见路径（/sitemap.xml、/sitemap_index.xml）也未找到有效内容'
+          expected: 'Sitemap 可访问且非空',
+          description: `请求 ${WP_SITEMAP_PATH} 失败，或未提取到有效 URL`
         }
       }
-      const groups = await collectSitemapLocsGrouped(sitemaps)
-      const locTotal = groups.reduce((n, g) => n + g.length, 0)
-      if (locTotal === 0) {
-        return {
-          status: 'fail',
-          actual: `${sitemaps.length} 个 sitemap，0 个 URL`,
-          expected: 'sitemap 至少包含 1 个有效 URL',
-          description: `已发现 ${sitemaps.length} 个 sitemap 但均未提取到 URL：${sitemaps.map(displayUrl).join('、')}`
-        }
-      }
-      return {
-        status: 'pass',
-        actual: `${sitemaps.length} 个 sitemap，共 ${locTotal} 个 URL`,
-        expected: 'robots.txt 声明 Sitemap，可访问且非空',
-        description: `robots.txt 已声明 Sitemap：${sitemaps.map(displayUrl).join('、')}，共 ${locTotal} 个 URL`
-      }
+      const groups = await collectSitemapGroups(sitemaps)
+      const locTotal = groups.reduce((n, g) => n + g.locs.length, 0)
+      return sitemapCountResult(countSitemapContent(groups), locTotal, sitemaps)
     } catch (e) {
       return {
         status: 'fail',

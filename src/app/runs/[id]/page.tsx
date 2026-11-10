@@ -289,20 +289,39 @@ export default function TaskDetailPage() {
         )}
       </Card>
 
-      {task.pageSet && task.pageSet.representatives.length > 0 && (
+      {task.pageSet &&
+        (task.pageSet.representatives.length > 0 ||
+          (task.pageSet.contentCheck && task.pageSet.contentPageCount)) && (
         <Card>
           <button
             type="button"
             onClick={() => setShowPages((v) => !v)}
             className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left"
           >
-            <span className="text-sm font-medium">检测页面 <span className="ml-1 font-normal text-foreground-subtle">{task.pageSet.representatives.length} 个代表页</span></span>
+            <span className="text-sm font-medium">
+              检测页面
+              <span className="ml-1 font-normal text-foreground-subtle">
+                {task.pageSet.representatives.length > 0
+                  ? `${task.pageSet.representatives.length} 个代表页`
+                  : `${task.pageSet.contentPageCount ?? 0} 个内容链接`}
+              </span>
+            </span>
             {showPages ? <ChevronUp className="h-4 w-4 text-foreground-subtle" /> : <ChevronDown className="h-4 w-4 text-foreground-subtle" />}
           </button>
           {showPages && (
             <div className="border-t border-border px-5 py-3">
               <p className="mb-2 text-xs text-foreground-muted">
-                从 {task.pageSet.candidateCount} 个候选 URL 去重模板{task.pageSet.locTotal ? `，sitemap 共 ${task.pageSet.locTotal} 个 URL` : ''}。
+                {task.pageSet.representatives.length > 0
+                  ? `从 ${task.pageSet.candidateCount} 个候选 URL 去重模板`
+                  : 'sitemap 枚举到的内容链接'}
+                {task.pageSet.contentCounts
+                  ? `，页面 ${task.pageSet.contentCounts.pages}、新闻 ${task.pageSet.contentCounts.posts}、产品 ${task.pageSet.contentCounts.products}`
+                  : task.pageSet.locTotal
+                    ? `，sitemap 共 ${task.pageSet.locTotal} 个 URL`
+                    : ''}
+                {task.pageSet.contentCheck && task.pageSet.contentPageCount
+                  ? `。H1 / 隐藏板块逐页检查 ${task.pageSet.contentPageCount} 个内容链接。`
+                  : '。'}
               </p>
               <ul className="divide-y divide-border text-xs">
                 {task.pageSet.representatives.map((p) => (

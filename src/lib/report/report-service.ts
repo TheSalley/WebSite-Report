@@ -242,8 +242,7 @@ export async function buildReportPdf(taskId: number): Promise<Buffer> {
 
 /** 生成报告 HTML —— 合同式表格版式（可打印为 PDF） */
 export async function buildReportHtml(data: ReportData): Promise<string> {
-  const { site, results, generatedAt, settings, pagespeedShots, passCount, warnCount, failCount, skipCount, verifyCount } = data
-  const checkResultCount = results.filter((r) => resultKind(r) === 'check').length
+  const { site, results, generatedAt, settings, pagespeedShots } = data
   const task = data.task
   const CN = ['一','二','三','四','五','六','七','八','九','十']
   let sectionNo = 3
@@ -383,19 +382,26 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
 
   // ── 检测页面集合（sitemap 枚举 + 模板去重结果）──
   const pageSet = data.pageSet
-  const pageSetSection = pageSet && pageSet.representatives.length > 0
+  const pageSetSection =
+    pageSet && (pageSet.representatives.length > 0 || (pageSet.contentCheck && pageSet.contentPageCount))
     ? `<div class="pageset-box">
       <div class="pageset-head">
-        <span class="badge badge-pass">${pageSet.representatives.length} 个代表页</span>
-        <span class="pageset-hint">模板去重自 ${pageSet.candidateCount} 个候选 URL</span>
+        <span class="badge badge-pass">${
+          pageSet.representatives.length > 0
+            ? `${pageSet.representatives.length} 个代表页`
+            : `${pageSet.contentPageCount ?? 0} 个内容链接`
+        }</span>
+        ${pageSet.representatives.length > 0 ? `<span class="pageset-hint">模板去重自 ${pageSet.candidateCount} 个候选 URL</span>` : ''}
+        ${pageSet.contentCounts ? `<span class="pageset-hint">页面 ${pageSet.contentCounts.pages}、新闻 ${pageSet.contentCounts.posts}、产品 ${pageSet.contentCounts.products}</span>` : ''}
+        ${pageSet.contentCheck && pageSet.contentPageCount ? `<span class="pageset-hint">H1 / 隐藏板块逐页检查 ${pageSet.contentPageCount} 个内容链接</span>` : ''}
       </div>
       ${pageSet.sitemaps.length > 0 ? `<div class="pageset-sitemaps">${pageSet.sitemaps.map((sm) => `<span class="pageset-sm">${escapeHtml(displayUrl(sm))}</span>`).join('')}</div>` : ''}
-      <div class="pageset-table-wrap">
+      ${pageSet.representatives.length > 0 ? `<div class="pageset-table-wrap">
         <table class="pageset-table">
           <thead><tr><th style="width:62%">页面 URL</th><th>模板签名</th></tr></thead>
           <tbody>${pageSet.representatives.map((p) => `<tr><td class="pageset-url">${escapeHtml(displayUrl(p.url))}</td><td class="pageset-sig">${escapeHtml(p.templateSignature || '—')}</td></tr>`).join('')}</tbody>
         </table>
-      </div>
+      </div>` : ''}
     </div>`
     : ''
 
@@ -404,7 +410,10 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   const elPages = data.siteData?.['delivery.elementor.hidden-both']?.pages ?? []
   // 旧任务提示：多页面枚举已采集但缺少逐页明细数据（功能上线前运行的任务）
   const deliveryStaleHint =
-    data.pageSet && data.pageSet.representatives.length > 0 && h1Pages.length === 0 && elPages.length === 0
+    data.pageSet &&
+    (data.pageSet.representatives.length > 0 || (data.pageSet.contentCheck && data.pageSet.contentPageCount)) &&
+    h1Pages.length === 0 &&
+    elPages.length === 0
       ? `<div class="pageset-box stale-box">
       <div class="pageset-head">
         <span class="badge badge-warn">数据不完整</span>
@@ -414,11 +423,8 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
       : ''
   const deliveryMatrix = (() => {
     if (h1Pages.length + elPages.length === 0) return ''
-    const reps = data.pageSet?.representatives ?? []
-    const urls =
-      reps.length > 0
-        ? reps.map((r) => r.url)
-        : Array.from(new Set([...h1Pages.map((p) => p.url), ...elPages.map((p) => p.url)]))
+    // H1/隐藏板块已按 sitemap 内容链接逐页检查，直接以采集到的页面为准（可能多于模板代表页）
+    const urls = Array.from(new Set([...h1Pages.map((p) => p.url), ...elPages.map((p) => p.url)]))
     const h1ByUrl = new Map(h1Pages.map((p) => [p.url, p]))
     const elByUrl = new Map(elPages.map((p) => [p.url, p]))
     const rows = urls
@@ -484,11 +490,9 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     @page { size: A4; }
     .report-root .contract-table { break-inside: auto; }
     .report-root .contract-table tr, .report-root .contract-table td { break-inside: auto; }
-    .report-root .header, .report-root .stat, .report-root .shot-item { break-inside: avoid; }
+    .report-root .header, .report-root .shot-item { break-inside: avoid; }
     .report-root thead { display: table-header-group; }
     .report-root { background: #fff; }
-    .stat-grid { grid-template-columns: repeat(6, 1fr); }
-    .stat-total, .stat-pass, .stat-warn, .stat-fail, .stat-skip, .stat-verify { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .report-root .shot-grid { gap: 12pt; }
     .report-root .shot-item img { height: 200pt; object-fit: contain; background: #fff; }
     .report-root .shot-item figcaption { font-size: 10px; padding-top: 3pt; }
@@ -513,18 +517,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .meta-table td { padding: 7px 12px; }
   .meta-table td.label { background: #f8fafc; color: #475569; font-weight: 600; width: 9%; text-align: center; white-space: nowrap; }
   .meta-table td.value { width: 41%; }
-
-  /* 结果统计：彩色卡片 */
-  .stat-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 6px; }
-  .stat { border-radius: 12px; padding: 16px 10px; text-align: center; box-shadow: 0 2px 10px rgba(15,23,42,.06); }
-  .stat .stat-num { font-size: 26px; font-weight: 800; line-height: 1.1; }
-  .stat .stat-label { margin-top: 5px; font-size: 12px; color: inherit; opacity: .85; }
-  .stat-pass { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
-  .stat-warn { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
-  .stat-fail { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-  .stat-skip { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
-  .stat-verify { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
-  .stat-total { background: #1e293b; color: #fff; border: 1px solid #1e293b; }
 
   /* 检测明细 */
   .main-table tbody tr:nth-child(even) td { background: #fbfcfe; }
@@ -590,16 +582,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     <h1>${escapeHtml(settings.reportTitle || '网站合规性检测报告')}</h1>
     ${settings.companyName ? `<div class="company">${escapeHtml(settings.companyName)}</div>` : ''}
   </div>
-
-  <div class="stat-grid">
-    <div class="stat stat-total"><div class="stat-num">${checkResultCount}</div><div class="stat-label">检测合计</div></div>
-    <div class="stat stat-pass"><div class="stat-num">${passCount}</div><div class="stat-label">通过</div></div>
-    <div class="stat stat-warn"><div class="stat-num">${warnCount}</div><div class="stat-label">警告</div></div>
-    <div class="stat stat-fail"><div class="stat-num">${failCount}</div><div class="stat-label">失败</div></div>
-    <div class="stat stat-skip"><div class="stat-num">${skipCount}</div><div class="stat-label">跳过</div></div>
-    <div class="stat stat-verify"><div class="stat-num">${verifyCount}</div><div class="stat-label">待验收</div></div>
-  </div>
-
   <h2 class="section-title">一、基本信息</h2>
   <table class="contract-table meta-table">
     <tr>
