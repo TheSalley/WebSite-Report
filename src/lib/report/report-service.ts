@@ -1,6 +1,6 @@
 import { readFile } from 'fs/promises'
 import { join } from 'path'
-import { DATA_DIR, getTask, getSite, getRuleSet, listCheckResults } from '../store'
+import { DATA_DIR, getTask, getSite, getRuleSet, listCheckResults, listRulesForSet } from '../store'
 import { getReportSettings } from '../settings'
 import { DELIVERABLE_PRESETS } from '../seed'
 import { getBrowser } from '../engine/browser'
@@ -8,7 +8,7 @@ import { describeElementorItem } from '../engine/rules/delivery'
 import { displayUrl, pageLabel } from '../display'
 
 import type { CheckResult, ReportSettings, Site, RuleSet, Task, SiteDataByRuleKey } from '../types'
-import { isArtifactResult, isDeliverableResult, resultKind } from '../rule-kinds'
+import { resultKind } from '../rule-kinds'
 
 /** 报告数据（含截图 dataURL） */
 export interface ReportData {
@@ -29,6 +29,8 @@ export interface ReportData {
   pageSet: import('../types').TaskPageSet | null
   /** 站点级规则的结构化数据（按 ruleKey 类型化，含交付检查逐页明细） */
   siteData: SiteDataByRuleKey | null
+  /** 板块展示顺序（按规则集定义） */
+  groupOrder: Record<string, number>
 }
 
 /** ISO 时间 → 本地可读时间（YYYY-MM-DD HH:mm），空值/异常显示 — */
@@ -130,6 +132,12 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
   if (!rawTask) throw new Error('任务不存在')
   const site = (await getSite(rawTask.siteId))!
   const ruleSet = (await getRuleSet(rawTask.ruleSetId))!
+  const rules = await listRulesForSet(rawTask.ruleSetId)
+  const groupOrder: Record<string, number> = {}
+  let groupIndex = 0
+  for (const rule of rules) {
+    if (!(rule.groupName in groupOrder)) groupOrder[rule.groupName] = groupIndex++
+  }
 
   const task: Task = {
     id: rawTask.id,
@@ -171,7 +179,7 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     }))
   )
 
-  // 通过率只统计自动检测；合同文案独立人工验收；功能产物仅留存证据
+  // 通过率只统计机器检测；合同文案独立人工验收；功能产物仅留存证据
   const checkResults = results.filter((r) => resultKind(r) === 'check')
   const passCount = checkResults.filter((r) => r.status === 'pass').length
   const warnCount = checkResults.filter((r) => r.status === 'warn').length
@@ -193,21 +201,9 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
     settings: await getReportSettings(),
     pagespeedShots: await readPagespeedShots(taskId),
     pageSet: task.pageSet ?? null,
-    siteData: task.siteData ?? null
+    siteData: task.siteData ?? null,
+    groupOrder
   }
-}
-
-/** 状态徽章 HTML（合同风格：细边框 + 浅底色） */
-function statusBadgeHtml(status: string): string {
-  const map: Record<string, { text: string; cls: string }> = {
-    pass: { text: '通过', cls: 'pass' },
-    warn: { text: '通过', cls: 'pass' },
-    fail: { text: '失败', cls: 'fail' },
-    skip: { text: '跳过', cls: 'skip' },
-    verify: { text: '待验收', cls: 'verify' }
-  }
-  const m = map[status] ?? { text: status, cls: 'skip' }
-  return `<span class="badge badge-${m.cls}">${m.text}</span>`
 }
 
 /** 生成报告 PDF（服务端 Chromium 渲染，A4 打印样式） */
@@ -249,21 +245,22 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   const sectionTitle = (title: string) => { const no = sectionNo++; return `<h2 class="section-title">${CN[no - 1] ?? no}、${title}</h2>` }
   const logoDataUrl = settings.logoPath ? await resolveLogoDataUrl(settings.logoPath) : null
 
-  // 分区：自动检测结果进主检测明细表；合同文案单列「人工验收清单」；功能产物单独成节
-  const autoResults = results.filter((r) => resultKind(r) === 'check')
-  const verifyResults = results.filter((r) => isDeliverableResult(r))
-  const artifactResults = results.filter((r) => isArtifactResult(r))
+  // 检测明细包含机器检测与合同文案；功能产物不进入明细表
+  const reportResults = results.filter((r) => resultKind(r) !== 'artifact')
 
   // 按分组聚合（保持检测顺序）
   const groups = new Map<string, (typeof data.results)[number][]>()
-  for (const r of autoResults) {
+  for (const r of reportResults) {
     const arr = groups.get(r.groupName) ?? []
     arr.push(r)
     groups.set(r.groupName, arr)
   }
 
   // ── 主检测明细表（合同式：板块列 rowspan 合并）──
-  const mainRows = Array.from(groups.entries())
+  const orderedGroups = Array.from(groups.entries()).sort(
+    ([a], [b]) => (data.groupOrder[a] ?? Number.MAX_SAFE_INTEGER) - (data.groupOrder[b] ?? Number.MAX_SAFE_INTEGER)
+  )
+  const mainRows = orderedGroups
     .map(([groupName, groupResults]) =>
       groupResults
         .map((r, idx) => {
@@ -281,7 +278,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
             <td class="page-cell">${escapeHtml(pageLabel(r.pageUrl))}</td>
             <td class="desc-cell">${descHtml}${noteHtml}</td>
             <td class="deliver-cell">
-              <div class="cell-status">${r.status === 'verify' ? '<span class="badge badge-verify">待人工确认</span>' : statusBadgeHtml(r.status)}</div>
               ${r.deliverable && r.deliverable.trim() ? `<div class="cell-deliver"><span class="deliver-text">${safeReportText(r.deliverable)}</span></div>` : ''}
             </td>
           </tr>`
@@ -290,82 +286,75 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     )
     .join('')
 
-  // ── 人工验收清单：合同文案与人工交付项单独成表 ──
-  const verifyGroups = new Map<string, (typeof data.results)[number][]>()
-  for (const r of verifyResults) {
-    const arr = verifyGroups.get(r.groupName) ?? []
-    arr.push(r)
-    verifyGroups.set(r.groupName, arr)
+  // ── 检测出的具体错误问题（网站交付检查）──
+  const isDeliveryReport = reportResults.some((r) => r.ruleKey.startsWith('delivery.'))
+  const issueRows: { type: string; page: string; problem: string; detail?: string }[] = []
+  if (isDeliveryReport) {
+    const h1Pages = data.siteData?.['delivery.h1.count']?.pages ?? []
+    for (const page of h1Pages) {
+      if (page.h1s.length === 1) continue
+      issueRows.push({
+        type: 'H1 标题',
+        page: page.url,
+        problem: page.h1s.length === 0 ? '缺少 H1 标题' : `存在 ${page.h1s.length} 个 H1 标题`,
+        detail: page.h1s.length > 1 ? page.h1s.slice(0, 5).join(' / ') : undefined
+      })
+    }
+    const elPages = data.siteData?.['delivery.elementor.hidden-both']?.pages ?? []
+    for (const page of elPages) {
+      if (page.items.length === 0) continue
+      issueRows.push({
+        type: 'Elementor 隐藏板块',
+        page: page.url,
+        problem: `发现 ${page.items.length} 个同时隐藏于桌面端和移动端的板块`,
+        detail: page.items.slice(0, 5).map(describeElementorItem).join('；') + (page.items.length > 5 ? ` 等 ${page.items.length} 个` : '')
+      })
+    }
+    for (const r of reportResults) {
+      if (!r.ruleKey.startsWith('delivery.')) continue
+      if (r.ruleKey === 'delivery.h1.count' || r.ruleKey === 'delivery.elementor.hidden-both') continue
+      if (r.status !== 'fail' && r.status !== 'warn') continue
+      issueRows.push({ type: r.ruleName, page: r.pageUrl, problem: r.actualValue || '检测异常', detail: r.description })
+    }
+    // 旧任务没有逐页数据时，回退到聚合结果中的问题说明
+    if (h1Pages.length === 0) {
+      const r = reportResults.find((item) => item.ruleKey === 'delivery.h1.count')
+      if (r && (r.status === 'fail' || r.status === 'warn')) {
+        issueRows.push({ type: r.ruleName, page: r.pageUrl, problem: r.actualValue || '检测异常', detail: r.description })
+      }
+    }
+    if (elPages.length === 0) {
+      const r = reportResults.find((item) => item.ruleKey === 'delivery.elementor.hidden-both')
+      if (r && (r.status === 'fail' || r.status === 'warn')) {
+        issueRows.push({ type: r.ruleName, page: r.pageUrl, problem: r.actualValue || '检测异常', detail: r.description })
+      }
+    }
   }
-  const verifyRows = Array.from(verifyGroups.entries())
-    .map(([groupName, groupResults]) =>
-      groupResults
-        .map((r, idx) => {
-          const firstCell =
-            idx === 0
-              ? `<td rowspan="${groupResults.length}" class="group-cell">${escapeHtml(groupName)}<span class="group-count">${groupResults.length} 项</span></td>`
-              : ''
-          const content = r.deliverable && r.deliverable.trim() ? safeReportText(r.deliverable) : r.description ? safeReportText(r.description) : '—'
-          const noteHtml = r.note ? `<div class="note">备注：${safeReportText(r.note)}</div>` : ''
-          return `<tr>
-            ${firstCell}
-            <td class="item-cell"><div class="item-name">${escapeHtml(r.ruleName)}</div></td>
-            <td class="desc-cell">${content}${noteHtml}</td>
-            <td class="accept-cell">${statusBadgeHtml(r.status)}</td>
-          </tr>`
-        })
-        .join('')
-    )
-    .join('')
-  const verifySection =
-    verifyResults.length === 0
-      ? ''
-      : `<div class="pageset-box">
-      <div class="pageset-head">
-        <span class="badge badge-verify">合同文案 ${verifyResults.length} 项</span>
-        <span class="pageset-hint">合同条款与交付说明不自动检测，需验收人员确认后更新状态</span>
-      </div>
-      <div class="pageset-table-wrap">
-        <table class="contract-table accept-table">
-          <thead><tr>
-            <th style="width:11%">板块</th>
-            <th style="width:30%">交付项</th>
-            <th style="width:45%">交付内容</th>
-            <th style="width:14%">验收状态</th>
-          </tr></thead>
-          <tbody>${verifyRows}</tbody>
-        </table>
-      </div>
+  const issueSection = !isDeliveryReport
+    ? ''
+    : issueRows.length === 0
+      ? '<div class="issue-empty">未发现具体错误问题</div>'
+      : `<div class="pageset-table-wrap">
+      <table class="contract-table main-table issue-table">
+        <thead><tr>
+          <th style="width:16%">问题类型</th>
+          <th style="width:28%">页面</th>
+          <th style="width:56%">具体问题</th>
+        </tr></thead>
+        <tbody>${issueRows
+          .map(
+            (issue) => `<tr>
+          <td class="issue-type">${escapeHtml(issue.type)}</td>
+          <td class="issue-page">${escapeHtml(issue.page ? pageLabel(issue.page) : '—')}</td>
+          <td class="issue-problem">${safeReportText(issue.problem)}${issue.detail ? `<div class="issue-detail">${safeReportText(issue.detail)}</div>` : ''}</td>
+        </tr>`
+          )
+          .join('')}</tbody>
+      </table>
     </div>`
 
   // ── 截图（仅 PageSpeed 移动端/桌面端页面截图）──
   const shotItems = pagespeedShots.filter((s) => s.dataUrl)
-  // ── 功能产物清单：明确说明截图是否生成，与检测结论分开 ──
-  const artifactRows = artifactResults
-    .map((r) => `<tr>
-      <td class="item-cell"><div class="item-name">${escapeHtml(r.ruleName)}</div></td>
-      <td class="desc-cell">${safeReportText(r.actualValue || r.description)}</td>
-      <td class="accept-cell">${statusBadgeHtml(r.status)}</td>
-    </tr>`)
-    .join('')
-  const artifactSection = artifactResults.length === 0
-    ? ''
-    : `<div class="pageset-box">
-      <div class="pageset-head">
-        <span class="badge badge-pass">功能产物 ${artifactResults.length} 项</span>
-        <span class="pageset-hint">仅留存证据，不计入检测合计与通过率</span>
-      </div>
-      <div class="pageset-table-wrap">
-        <table class="contract-table accept-table">
-          <thead><tr>
-            <th style="width:30%">产物</th>
-            <th style="width:56%">说明</th>
-            <th style="width:14%">状态</th>
-          </tr></thead>
-          <tbody>${artifactRows}</tbody>
-        </table>
-      </div>
-    </div>`
   const screenshotSection =
     shotItems.length === 0
       ? ''
@@ -379,108 +368,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
         )
         .join('')}
     </div>`
-
-  // ── 检测页面集合（sitemap 枚举 + 模板去重结果）──
-  const pageSet = data.pageSet
-  const pageSetSection =
-    pageSet && (pageSet.representatives.length > 0 || (pageSet.contentCheck && pageSet.contentPageCount))
-    ? `<div class="pageset-box">
-      <div class="pageset-head">
-        <span class="badge badge-pass">${
-          pageSet.representatives.length > 0
-            ? `${pageSet.representatives.length} 个代表页`
-            : `${pageSet.contentPageCount ?? 0} 个内容链接`
-        }</span>
-        ${pageSet.representatives.length > 0 ? `<span class="pageset-hint">模板去重自 ${pageSet.candidateCount} 个候选 URL</span>` : ''}
-        ${pageSet.contentCounts ? `<span class="pageset-hint">页面 ${pageSet.contentCounts.pages}、新闻 ${pageSet.contentCounts.posts}、产品 ${pageSet.contentCounts.products}</span>` : ''}
-        ${pageSet.contentCheck && pageSet.contentPageCount ? `<span class="pageset-hint">H1 / 隐藏板块逐页检查 ${pageSet.contentPageCount} 个内容链接</span>` : ''}
-      </div>
-      ${pageSet.sitemaps.length > 0 ? `<div class="pageset-sitemaps">${pageSet.sitemaps.map((sm) => `<span class="pageset-sm">${escapeHtml(displayUrl(sm))}</span>`).join('')}</div>` : ''}
-      ${pageSet.representatives.length > 0 ? `<div class="pageset-table-wrap">
-        <table class="pageset-table">
-          <thead><tr><th style="width:62%">页面 URL</th><th>模板签名</th></tr></thead>
-          <tbody>${pageSet.representatives.map((p) => `<tr><td class="pageset-url">${escapeHtml(displayUrl(p.url))}</td><td class="pageset-sig">${escapeHtml(p.templateSignature || '—')}</td></tr>`).join('')}</tbody>
-        </table>
-      </div>` : ''}
-    </div>`
-    : ''
-
-  // ── 交付检查明细（按页面）：Excel 式矩阵，逐页展示 H1 与 Elementor 隐藏板块 ──
-  const h1Pages = data.siteData?.['delivery.h1.count']?.pages ?? []
-  const elPages = data.siteData?.['delivery.elementor.hidden-both']?.pages ?? []
-  // 旧任务提示：多页面枚举已采集但缺少逐页明细数据（功能上线前运行的任务）
-  const deliveryStaleHint =
-    data.pageSet &&
-    (data.pageSet.representatives.length > 0 || (data.pageSet.contentCheck && data.pageSet.contentPageCount)) &&
-    h1Pages.length === 0 &&
-    elPages.length === 0
-      ? `<div class="pageset-box stale-box">
-      <div class="pageset-head">
-        <span class="badge badge-warn">数据不完整</span>
-        <span class="pageset-hint">该任务运行于「逐页明细」功能之前，无法按页面展示 H1 / Elementor 明细，请重新检测。</span>
-      </div>
-    </div>`
-      : ''
-  const deliveryMatrix = (() => {
-    if (h1Pages.length + elPages.length === 0) return ''
-    // H1/隐藏板块已按 sitemap 内容链接逐页检查，直接以采集到的页面为准（可能多于模板代表页）
-    const urls = Array.from(new Set([...h1Pages.map((p) => p.url), ...elPages.map((p) => p.url)]))
-    const h1ByUrl = new Map(h1Pages.map((p) => [p.url, p]))
-    const elByUrl = new Map(elPages.map((p) => [p.url, p]))
-    const rows = urls
-      .map((url) => {
-        const h1 = h1ByUrl.get(url)
-        const el = elByUrl.get(url)
-        const h1Count = h1 ? h1.h1s.length : undefined
-        const h1Badge =
-          h1Count === undefined
-            ? '<span class="badge badge-skip">未采集</span>'
-            : h1Count === 1
-              ? '<span class="badge badge-pass">正常</span>'
-              : h1Count === 0
-                ? '<span class="badge badge-fail">缺 H1</span>'
-                : `<span class="badge badge-warn">${h1Count} 个 H1</span>`
-        const elCount = el ? el.items.length : undefined
-        const elBadge =
-          elCount === undefined
-            ? '<span class="badge badge-skip">未采集</span>'
-            : elCount === 0
-              ? '<span class="badge badge-pass">无</span>'
-              : `<span class="badge badge-fail">${elCount} 个</span>`
-        const elDetail =
-          el && el.items.length > 0
-            ? el.items.map((it) => `<div class="dx-el">${escapeHtml(describeElementorItem(it))}</div>`).join('')
-            : '<span class="dx-none">—</span>'
-        return `<tr>
-          <td class="dx-url">${escapeHtml(pageLabel(url))}</td>
-          <td class="dx-num">${h1Count === undefined ? '—' : String(h1Count)}</td>
-          <td class="dx-badge">${h1Badge}</td>
-          <td class="dx-num">${elCount === undefined ? '—' : String(elCount)}</td>
-          <td class="dx-badge">${elBadge}</td>
-          <td class="dx-detail">${elDetail}</td>
-        </tr>`
-      })
-      .join('')
-    return `<div class="pageset-box matrix-box">
-      <div class="pageset-head">
-        <span class="badge badge-pass">${urls.length} 个页面</span>
-        <span class="pageset-hint">逐页展示 H1 与 Elementor 隐藏板块检测结果</span>
-      </div>
-      <div class="pageset-table-wrap">
-        <table class="pageset-table matrix-table">
-          <thead><tr>
-            <th style="width:26%">页面</th>
-            <th style="width:9%;text-align:center">H1 数量</th>
-            <th style="width:13%;text-align:center">H1 状态</th>
-            <th style="width:11%;text-align:center">隐藏板块</th>
-            <th style="width:13%;text-align:center">状态</th>
-            <th style="width:28%">板块详情</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>`
-  })()
 
   return `<style>
   .report-root, .report-root * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -528,6 +415,11 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .sev-warning { color: #b45309; border-color: #b45309; background: #fffbeb; }
   .sev-suggest { color: #6b7280; border-color: #6b7280; background: #fafafa; }
   .desc-cell .note { margin-top: 4px; padding: 3px 6px; background: #fffbeb; border-left: 3px solid #f59e0b; font-size: 12px; }
+  .issue-table td.issue-type { font-weight: 600; color: #1e293b; }
+  .issue-table td.issue-page { font-size: 12px; color: #64748b; word-break: break-all; }
+  .issue-table td.issue-problem { color: #334155; word-break: break-word; }
+  .issue-table td.issue-problem .issue-detail { margin-top: 3px; font-size: 11px; color: #64748b; word-break: break-all; }
+  .issue-empty { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; background: #fff; font-size: 13px; color: #64748b; }
 
   .badge { display: inline-block; border: 1px solid; border-radius: 999px; padding: 2px 12px; font-size: 12px; font-weight: 600; white-space: nowrap; letter-spacing: .3px; }
   .badge-pass { color: #15803d; border-color: #15803d; background: #f0fdf4; }
@@ -537,7 +429,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .badge-verify { color: #2563eb; border-color: #2563eb; background: #eff6ff; }
   .deliver-cell { text-align: center; vertical-align: middle; }
   .deliver-cell .deliver-text { display: inline-block; text-align: left; font-size: 12px; line-height: 1.6; color: #334155; word-break: break-word; }
-  .deliver-cell .cell-status { margin-bottom: 4px; }
   .deliver-cell .cell-deliver { text-align: left; }
   .stale-box { border-color: #fde68a; background: #fffbeb; }
   .stale-box .pageset-hint { color: #92400e; }
@@ -608,15 +499,9 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     <tbody>${mainRows}</tbody>
   </table>
 
-  ${verifySection ? `${sectionTitle('合同文案与人工验收')}${verifySection}` : ''}
+  ${issueSection ? `${sectionTitle('检测出的具体错误问题')}${issueSection}` : ''}
 
-  ${deliveryMatrix ? `${sectionTitle('交付检查明细（按页面）')}${deliveryMatrix}` : deliveryStaleHint}
-
-  ${pageSetSection ? `${sectionTitle('检测页面')}${pageSetSection}` : ''}
-
-  ${artifactSection ? `${sectionTitle('功能产物')}${artifactSection}` : ''}
-
-  ${screenshotSection ? `${sectionTitle('PageSpeed 截图')}${screenshotSection}` : ''}
+  ${screenshotSection ? `${sectionTitle('PageSpeed 评分截图')}${screenshotSection}` : ''}
 
   <div class="footer">${escapeHtml(settings.footerText)}</div>
 

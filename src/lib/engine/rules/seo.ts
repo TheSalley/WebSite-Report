@@ -3,6 +3,36 @@ import { collectSitemapGroups, countSitemapContent, getSitemapUrls, WP_SITEMAP_P
 import { displayUrl } from '../../display'
 
 export const seoRules: Record<string, RuleHandler> = {
+  'seo.noindex.disabled': async ({ snapshot }) => {
+    const hasNoindex = (value: string): boolean =>
+      value
+        .toLowerCase()
+        .split(/[\s,;]+/)
+        .some((token) => token === 'noindex' || token === 'none')
+    const metaTags = ['robots', 'googlebot', 'bingbot']
+    const blockedBy = [
+      ...metaTags
+        .filter((name) => hasNoindex(snapshot.metas[name] ?? ''))
+        .map((name) => `meta ${name}`),
+      ...(hasNoindex(snapshot.network.mainResponseHeaders['x-robots-tag'] ?? '') ? ['X-Robots-Tag'] : [])
+    ]
+
+    if (blockedBy.length > 0) {
+      return {
+        status: 'fail',
+        actual: `${blockedBy.join('、')} 输出 noindex`,
+        expected: '未输出 noindex（允许搜索引擎收录）',
+        description: 'No-Index 未关闭，搜索引擎将不会收录该页面；请移除 robots meta / X-Robots-Tag 中的 noindex 设置'
+      }
+    }
+    return {
+      status: 'pass',
+      actual: '未发现 noindex',
+      expected: '未输出 noindex（允许搜索引擎收录）',
+      description: 'No-Index 已关闭，页面可正常被搜索引擎收录'
+    }
+  },
+
   'seo.title.exists': async ({ snapshot }) => {
     const title = snapshot.title.trim()
     return {

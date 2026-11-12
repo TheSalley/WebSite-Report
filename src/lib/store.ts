@@ -26,7 +26,7 @@ export interface RuleRow {
   deliverable?: string
   /** 执行范围：'site' 站点级（整站仅执行一次）| 'page' 页面级（每个代表页执行，默认） */
   scope?: 'page' | 'site'
-  /** 规则类型：check 自动检测 | deliverable 合同文案 | artifact 功能产物 */
+  /** 规则类型：check 机器检测 | deliverable 合同文案 | artifact 功能产物 */
   kind: 'check' | 'deliverable' | 'artifact'
   params: Record<string, unknown>
   sortOrder: number
@@ -69,7 +69,7 @@ export interface CheckResultRow {
   ruleKey: string
   ruleName: string
   groupName: string
-  /** 结果类型：check 自动检测 | deliverable 合同文案 | artifact 功能产物 */
+  /** 结果类型：check 机器检测 | deliverable 合同文案 | artifact 功能产物 */
   kind: 'check' | 'deliverable' | 'artifact'
   pageUrl: string
   status: 'pass' | 'warn' | 'fail' | 'skip' | 'verify'

@@ -33,7 +33,7 @@ export interface RunRuleResult {
   ruleKey: string
   ruleName: string
   groupName: string
-  /** 结果类型：check 自动检测 | deliverable 合同文案 | artifact 功能产物 */
+  /** 结果类型：check 机器检测 | deliverable 合同文案 | artifact 功能产物 */
   kind?: 'check' | 'deliverable' | 'artifact'
   /** 检测页面 URL（多页面任务按页面分组） */
   pageUrl: string
@@ -91,7 +91,7 @@ function extraSnapshotPages(pages: string[], requested: string[]): string[] {
  */
 export async function runTask(options: RunTaskOptions): Promise<RunResult> {
   const { pages, rules, taskId } = options
-  // 引擎只执行自动检测项；合同文案与功能产物由任务层单独处理，避免误开页面检测
+  // 引擎只执行机器检测项；合同文案与功能产物由任务层单独处理，避免误开页面检测
   // 入选即执行：规则是否启用由分组中是否存在该规则决定，不再维护独立开关
   const enabledRules = rules.filter((r) => (r.kind ?? 'check') === 'check')
   // 站点级规则（整站检查）仅在任务中执行一次；页面级规则按代表页执行
@@ -216,7 +216,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           }
         }
 
-        // 自动检测失败/警告 → 截屏取证
+        // 机器检测失败/警告 → 截屏取证
         let screenshotPath: string | null = null
         if (outcome.status === 'fail' || outcome.status === 'warn') {
           screenshotPath = await screenshotManager.capture(page, pi === 0 ? rule.ruleKey : `p${pi}-${rule.ruleKey}`)

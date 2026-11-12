@@ -8,7 +8,7 @@ export function resultKind(result: Pick<CheckResult, 'kind' | 'ruleKey' | 'statu
   return 'check'
 }
 
-/** 是否为自动检测项 */
+/** 是否为机器检测项 */
 export function isCheckResult(result: Pick<CheckResult, 'kind' | 'ruleKey' | 'status'>): boolean {
   return resultKind(result) === 'check'
 }

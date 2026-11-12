@@ -73,7 +73,7 @@ export default function TaskDetailPage() {
     } catch (e) {
       setError(friendlyError(e))
     } finally {
-      if (showLoading) setResultsLoading(false)
+      setResultsLoading(false)
     }
   }, [taskId])
 
@@ -394,7 +394,7 @@ export default function TaskDetailPage() {
 
           {visibleChecks.length > 0 && statusFilter !== 'verify' && (
             <section className="space-y-4">
-              <SectionTitle title="自动检测" description={`${checkResults.length} 项，计入通过率。`} />
+              <SectionTitle title="机器检测" description={`${checkResults.length} 项，计入通过率。`} />
               {Array.from(pages.entries()).map(([pageUrl, items]) => {
                 const pageItems = items.filter((r) => statusFilter === 'all' || r.status === statusFilter)
                 if (pageItems.length === 0) return null

@@ -42,7 +42,7 @@ export interface RuleSetInput {
   scanPages?: boolean
 }
 
-/** 规则类型：check 自动检测 | deliverable 合同文案 | artifact 功能产物 */
+/** 规则类型：check 机器检测 | deliverable 合同文案 | artifact 功能产物 */
 export type RuleKind = 'check' | 'deliverable' | 'artifact'
 
 /** 规则类型元数据（全站唯一来源：规则库、任务详情、报告共用同一套命名） */
@@ -53,13 +53,13 @@ export const RULE_KINDS: ReadonlyArray<{
 }> = [
   {
     key: 'check',
-    label: '自动检测',
+    label: '机器检测',
     description: '由浏览器规则实际检查，计入通过 / 失败 / 跳过统计'
   },
   {
     key: 'deliverable',
     label: '合同文案',
-    description: '合同承诺或交付说明，不自动检测；需人工确认验收状态'
+    description: '合同承诺或交付说明，不参与机器检测；需人工确认验收状态'
   },
   {
     key: 'artifact',
@@ -81,7 +81,7 @@ export interface Rule {
   description?: string
   /** 执行范围：'site' 站点级（整站仅执行一次）| 'page' 页面级（每个代表页执行，默认） */
   scope?: 'page' | 'site'
-  /** 规则类型：自动检测 / 合同文案 / 功能产物（如截图） */
+  /** 规则类型：机器检测 / 合同文案 / 功能产物（如截图） */
   kind?: RuleKind
   params: Record<string, unknown>
   sortOrder: number
@@ -179,7 +179,7 @@ export interface CheckResult {
   ruleKey: string
   ruleName: string
   groupName: string
-  /** 结果类型：check 自动检测 | deliverable 合同文案 | artifact 功能产物 */
+  /** 结果类型：check 机器检测 | deliverable 合同文案 | artifact 功能产物 */
   kind?: RuleKind
   /** 检测页面 URL（多页面任务按页面分组；旧单页任务为空） */
   pageUrl: string

@@ -25,7 +25,7 @@ type GroupForm = { name: string; description: string; scanPages: boolean }
 const EMPTY_FORM: GroupForm = { name: '', description: '', scanPages: false }
 const KIND_OPTIONS = RULE_KINDS.map((kind) => ({ value: kind.key, label: kind.label }))
 
-/** 添加规则弹窗的业务分类：功能检测包含自动检测与 PageSpeed 等产物 */
+/** 添加规则弹窗的业务分类：功能检测页签包含机器检测与 PageSpeed 等产物 */
 type PickerCategory = 'functional' | 'deliverable'
 
 function categoryOf(kind: RuleKind): PickerCategory {
@@ -418,7 +418,7 @@ export default function RulesPage() {
               </div>
 
               {rules.length === 0 ? (
-                <Empty icon={<ListChecks className="h-7 w-7" />} title="这个分组还没有规则" description="从规则库添加自动检测、合同文案或功能产物。" />
+                <Empty icon={<ListChecks className="h-7 w-7" />} title="这个分组还没有规则" description="从规则库添加机器检测、合同文案或功能产物。" />
               ) : visibleRules.length === 0 ? (
                 <Empty icon={<Search className="h-7 w-7" />} title="没有匹配的规则" description="换个关键词试试。" />
               ) : (
@@ -521,7 +521,7 @@ export default function RulesPage() {
         }
       >
         <div className="space-y-3">
-          <div className="flex gap-5 overflow-x-auto border-b border-border">
+          <div className="flex gap-5 border-b border-border">
             {pickerTabs.map((tab) => {
               const active = pickerCategory === tab.key
               return (

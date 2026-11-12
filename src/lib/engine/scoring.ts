@@ -11,7 +11,7 @@ export interface ResultCounts {
 
 /**
  * 统计任务各状态数量（不计算综合评分）：
- * - 自动检测：计入通过 / 警告 / 失败 / 跳过
+ * - 机器检测：计入通过 / 警告 / 失败 / 跳过
  * - 合同文案：不参与通过率，未确认时计入待验收
  * - 功能产物：只留存证据，不计入任何统计
  */
@@ -21,12 +21,12 @@ export function countResults(results: { status: CheckStatus; kind?: RuleKind; ru
     const kind = resultKind({ kind: r.kind, ruleKey: r.ruleKey ?? '', status: r.status })
     // 功能产物（如截图）不是检测结论
     if (kind === 'artifact') continue
-    // 合同文案只做人工确认，不计入自动检测通过率
+    // 合同文案只做人工确认，不计入机器检测通过率
     if (kind === 'deliverable') {
       if (r.status === 'verify') counts.verifyCount++
       continue
     }
-    // 自动检测被人工改为「待验收」时，仅计入待验收
+    // 机器检测被人工改为「待验收」时，仅计入待验收
     if (r.status === 'verify') {
       counts.verifyCount++
       continue

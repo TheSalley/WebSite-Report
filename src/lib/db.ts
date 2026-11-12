@@ -136,6 +136,7 @@ export function getDb(): DatabaseSync {
     migratePagespeedScoreToShots(db)
     migrateWpSitemapLabels(db)
     migrateDeliveryRuleSetDescription(db)
+    migrateContractDeliverableKinds(db)
     removeDefaultPassBypass(db)
     migrateLogsFromFiles(db)
     // PSI API Key 配置已下线：清理历史遗留密钥
@@ -145,7 +146,7 @@ export function getDb(): DatabaseSync {
 }
 
 /**
- * 清理旧的「默认通过」参数：自动检测项应真实执行，合同文案应人工验收。
+ * 清理旧的「默认通过」参数：机器检测项应真实执行，合同文案应人工验收。
  * 该旁路已从引擎和界面移除，这里幂等删除历史参数，避免配置残留造成误解。
  */
 function removeDefaultPassBypass(sqlite: DatabaseSync): void {
@@ -323,7 +324,7 @@ function ensureCompatColumns(sqlite: DatabaseSync): void {
   if (!cols('tasks').includes('siteDataJson')) {
     sqlite.exec('ALTER TABLE tasks ADD COLUMN siteDataJson TEXT')
   }
-  // 仅在首次补列时导入旧分类；verify.* 是合同文案，不是自动检测项。
+  // 仅在首次补列时导入旧分类；verify.* 是合同文案，不是机器检测项。
   if (addRuleKind) {
     sqlite.prepare("UPDATE rules SET kind = 'deliverable' WHERE ruleKey LIKE 'verify.%'").run()
   }
@@ -443,6 +444,28 @@ function migrateDeliveryRuleSetDescription(sqlite: DatabaseSync): void {
     sqlite
       .prepare('UPDATE rule_sets SET description = ? WHERE name = ? AND description = ?')
       .run(newText, '网站交付检查', oldText)
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
+
+
+/**
+ * 响应式设计、多转化入口、全站搜索、GA 预埋、HTTPS 证书属于合同文案，
+ * 由人工验收，不参与机器检测。仅修正仍为机器检测的同名规则。
+ */
+function migrateContractDeliverableKinds(sqlite: DatabaseSync): void {
+  const marker = 'migration.contractDeliverableKinds.v1'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+  const keys = ['content.viewport', 'contract.contact', 'contract.search', 'contract.ga', 'security.https']
+  const update = sqlite.prepare("UPDATE rules SET kind = 'deliverable' WHERE ruleKey = ? AND kind = 'check'")
+  sqlite.exec('BEGIN')
+  try {
+    for (const key of keys) update.run(key)
     sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
     sqlite.exec('COMMIT')
   } catch (err) {

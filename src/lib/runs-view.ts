@@ -22,7 +22,7 @@ export type TaskRow = Task & { progress: TaskProgress | null }
  * 状态 Tab 计数：
  * - all：检测 + 合同文案（不含功能产物）
  * - verify：仅合同文案的待验收
- * - pass / warn / fail / skip：仅自动检测
+ * - pass / warn / fail / skip：仅机器检测
  */
 export function statusCounts(results: CheckResult[], key: CheckStatus | 'all'): number {
   if (key === 'all') return results.filter((r) => !isArtifactResult(r)).length
