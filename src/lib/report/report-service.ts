@@ -2,7 +2,7 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { DATA_DIR, getTask, getSite, getRuleSet, listCheckResults, listRulesForSet } from '../store'
 import { getReportSettings } from '../settings'
-import { DELIVERABLE_PRESETS } from '../seed'
+import { DELIVERABLE_PRESETS, CONTRACT_REPORT_ITEMS } from '../seed'
 import { getBrowser } from '../engine/browser'
 import { describeElementorItem } from '../engine/rules/delivery'
 import { displayUrl, pageLabel } from '../display'
@@ -100,7 +100,7 @@ function safeReportText(raw: string | null | undefined): string {
   for (const [emoji, svg] of EMOJI_SVG) {
     out = out.split(emoji).join(svg)
   }
-  return out
+  return out.replace(/\n/g, '<br>')
 }
 
 /** 读取截图文件并转为 data URL */
@@ -213,7 +213,7 @@ export async function buildReportPdf(taskId: number): Promise<Buffer> {
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<title>${escapeHtml(data.settings.reportTitle || '网站合规性检测报告')}</title>
+<title>${escapeHtml(data.settings.reportTitle || '网站检测报告')}</title>
 </head>
 <body>${await buildReportHtml(data)}</body>
 </html>`
@@ -247,19 +247,51 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
 
   // 检测明细包含机器检测与合同文案；功能产物不进入明细表
   const reportResults = results.filter((r) => resultKind(r) !== 'artifact')
+  const isDeliveryReport = reportResults.some((r) => r.ruleKey.startsWith('delivery.'))
 
-  // 按分组聚合（保持检测顺序）
-  const groups = new Map<string, (typeof data.results)[number][]>()
-  for (const r of reportResults) {
-    const arr = groups.get(r.groupName) ?? []
-    arr.push(r)
-    groups.set(r.groupName, arr)
+  type DetailRow = {
+    ruleKey: string
+    ruleName: string
+    description: string
+    deliverable: string
+    note: string | null
+  }
+
+  // 合同报告严格按示例 PDF 的固定条目与顺序；网站交付检查保持检测分组顺序
+  let orderedGroups: [string, DetailRow[]][]
+  if (isDeliveryReport) {
+    const groups = new Map<string, DetailRow[]>()
+    for (const r of reportResults) {
+      const arr = groups.get(r.groupName) ?? []
+      arr.push({
+        ruleKey: r.ruleKey,
+        ruleName: r.ruleName,
+        description: r.description ?? '',
+        deliverable: r.deliverable ?? '',
+        note: r.note ?? null
+      })
+      groups.set(r.groupName, arr)
+    }
+    orderedGroups = Array.from(groups.entries()).sort(
+      ([a], [b]) => (data.groupOrder[a] ?? Number.MAX_SAFE_INTEGER) - (data.groupOrder[b] ?? Number.MAX_SAFE_INTEGER)
+    )
+  } else {
+    const groups = new Map<string, DetailRow[]>()
+    for (const item of CONTRACT_REPORT_ITEMS) {
+      const arr = groups.get(item.groupName) ?? []
+      arr.push({
+        ruleKey: item.ruleKey,
+        ruleName: item.name,
+        description: item.description,
+        deliverable: item.deliverable,
+        note: null
+      })
+      groups.set(item.groupName, arr)
+    }
+    orderedGroups = Array.from(groups.entries())
   }
 
   // ── 主检测明细表（合同式：板块列 rowspan 合并）──
-  const orderedGroups = Array.from(groups.entries()).sort(
-    ([a], [b]) => (data.groupOrder[a] ?? Number.MAX_SAFE_INTEGER) - (data.groupOrder[b] ?? Number.MAX_SAFE_INTEGER)
-  )
   const mainRows = orderedGroups
     .map(([groupName, groupResults]) =>
       groupResults
@@ -269,13 +301,10 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
               ? `<td rowspan="${groupResults.length}" class="group-cell">${escapeHtml(groupName)}<span class="group-count">${groupResults.length} 项</span></td>`
               : ''
           const noteHtml = r.note ? `<div class="note">备注：${safeReportText(r.note)}</div>` : ''
-          const descParts: string[] = []
-          if (r.description) descParts.push(safeReportText(r.description))
-          const descHtml = descParts.join('；')
+          const descHtml = r.description ? safeReportText(r.description) : ''
           return `<tr>
             ${firstCell}
             <td class="item-cell"><div class="item-name">${escapeHtml(r.ruleName)}</div></td>
-            <td class="page-cell">${escapeHtml(pageLabel(r.pageUrl))}</td>
             <td class="desc-cell">${descHtml}${noteHtml}</td>
             <td class="deliver-cell">
               ${r.deliverable && r.deliverable.trim() ? `<div class="cell-deliver"><span class="deliver-text">${safeReportText(r.deliverable)}</span></div>` : ''}
@@ -287,7 +316,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     .join('')
 
   // ── 检测出的具体错误问题（网站交付检查）──
-  const isDeliveryReport = reportResults.some((r) => r.ruleKey.startsWith('delivery.'))
   const issueRows: { type: string; page: string; problem: string; detail?: string }[] = []
   if (isDeliveryReport) {
     const h1Pages = data.siteData?.['delivery.h1.count']?.pages ?? []
@@ -409,7 +437,6 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .main-table tbody tr:nth-child(even) td { background: #fbfcfe; }
   .main-table tbody tr:hover td { background: #f1f5ff; }
   .main-table td.item-name { font-weight: 600; color: #1e293b; }
-  .main-table td.page-cell { font-size: 12px; color: #64748b; word-break: break-all; max-width: 150px; vertical-align: middle; }
   .main-table .sev { display: inline-block; margin-top: 2px; font-size: 11px; border: 1px solid; border-radius: 2px; padding: 0 4px; }
   .sev-critical { color: #b91c1c; border-color: #b91c1c; background: #fef2f2; }
   .sev-warning { color: #b45309; border-color: #b45309; background: #fffbeb; }
@@ -470,7 +497,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
 
   <div class="header">
     ${logoDataUrl ? `<img src="${logoDataUrl}" alt="logo" style="display:block;height:44px;margin:0 auto 10px;object-fit:contain;" />` : ''}
-    <h1>${escapeHtml(settings.reportTitle || '网站合规性检测报告')}</h1>
+    <h1>${escapeHtml(settings.reportTitle || '网站检测报告')}</h1>
     ${settings.companyName ? `<div class="company">${escapeHtml(settings.companyName)}</div>` : ''}
   </div>
   <h2 class="section-title">一、基本信息</h2>
@@ -489,11 +516,10 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   <table class="contract-table main-table">
     <thead>
       <tr>
-        <th style="width:11%">检测板块</th>
-        <th style="width:18%">检测项目</th>
-        <th style="width:13%">检测页面</th>
-        <th style="width:44%">内容说明</th>
-        <th style="width:14%">交付成果</th>
+        <th style="width:15%">检测板块</th>
+        <th style="width:21%">检测项目</th>
+        <th style="width:55%">内容说明</th>
+        <th style="width:9%">交付成果</th>
       </tr>
     </thead>
     <tbody>${mainRows}</tbody>

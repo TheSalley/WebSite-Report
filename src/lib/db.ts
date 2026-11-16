@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, existsSync, readdirSync, renameSync } from 'fs'
 import { join } from 'path'
 import { DatabaseSync } from 'node:sqlite'
-import { DELIVERABLE_PRESETS } from './seed'
+import { BUILTIN_RULE_SETS, DELIVERABLE_PRESETS, toRuleRows } from './seed'
 
 /** 数据文件存储根目录（本地 web-report-data） */
 export const DATA_DIR = process.env.WEBREPORT_DATA_DIR ?? join(process.cwd(), 'web-report-data')
@@ -139,6 +139,7 @@ export function getDb(): DatabaseSync {
     migrateContractDeliverableKinds(db)
     migrateGTranslateCheck(db)
     migratePrivacyPolicyDeliverable(db)
+    migrateContractRuleSetSample(db)
     removeDefaultPassBypass(db)
     migrateLogsFromFiles(db)
     // PSI API Key 配置已下线：清理历史遗留密钥
@@ -507,6 +508,56 @@ function migratePrivacyPolicyDeliverable(sqlite: DatabaseSync): void {
     sqlite
       .prepare("UPDATE rules SET kind = 'deliverable' WHERE ruleKey = 'compliance.privacy' AND kind != 'deliverable'")
       .run()
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
+
+/**
+ * 将内置「建站服务合同验收」规则集统一为合同文案示例的 5 大板块 / 25 项（外加 PageSpeed 截图产物）。
+ * 仅替换内置规则集，一次性执行，避免覆盖用户后续修改。
+ */
+function migrateContractRuleSetSample(sqlite: DatabaseSync): void {
+  const marker = 'migration.contractRuleSetSample.v2'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+  const def = BUILTIN_RULE_SETS.find((item) => item.name === '建站服务合同验收')
+  const rs = sqlite
+    .prepare('SELECT id FROM rule_sets WHERE name = ? AND isBuiltin = 1')
+    .get('建站服务合同验收') as { id: number } | undefined
+  sqlite.exec('BEGIN')
+  try {
+    if (rs && def) {
+      const maxIdRow = sqlite.prepare('SELECT COALESCE(MAX(id), 0) AS maxId FROM rules').get() as { maxId: number }
+      const rows = toRuleRows(rs.id, def.rules, maxIdRow.maxId + 1)
+      sqlite.prepare('DELETE FROM rules WHERE ruleSetId = ?').run(rs.id)
+      const insert = sqlite.prepare(
+        `INSERT INTO rules (id, ruleSetId, groupName, ruleKey, name, enabled, description, params, sortOrder, deliverable, scope, kind)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      for (const row of rows) {
+        insert.run(
+          row.id,
+          row.ruleSetId,
+          row.groupName,
+          row.ruleKey,
+          row.name,
+          row.enabled ? 1 : 0,
+          row.description ?? null,
+          JSON.stringify(row.params),
+          row.sortOrder,
+          row.deliverable ?? null,
+          row.scope,
+          row.kind
+        )
+      }
+      sqlite
+        .prepare('UPDATE rule_sets SET description = ?, updatedAt = ? WHERE id = ?')
+        .run(def.description, new Date().toISOString(), rs.id)
+    }
     sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
     sqlite.exec('COMMIT')
   } catch (err) {

@@ -205,7 +205,7 @@ export interface ReportSettings {
 export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
   companyName: '',
   logoPath: '/logo.svg',
-  reportTitle: '网站合规性检测报告',
-  footerText: '本报告由网站合规性检测工具自动生成'
+  reportTitle: '网站检测报告',
+  footerText: '本报告由网站部检测工具自动生成'
 }
 
