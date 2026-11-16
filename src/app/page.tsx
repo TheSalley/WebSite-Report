@@ -2,8 +2,9 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { ArrowRight, Activity, Globe, ListChecks, Play, ShieldCheck } from 'lucide-react'
-import { Button, Card, Empty, PageHeader, StatusBadge } from '@/components/ui'
+import { ArrowRight, Activity, Globe, ListChecks, ShieldCheck } from 'lucide-react'
+import { Card, Empty, PageHeader, StatusBadge } from '@/components/ui'
+import { TaskProgressBar } from '@/components/task-progress'
 import type { RuleSet, Site } from '@/lib/types'
 import type { TaskRow } from '@/lib/runs-view'
 import { fmtTime } from '@/lib/runs-view'
@@ -66,14 +67,7 @@ export default function OverviewPage() {
     <div className="space-y-8">
       <PageHeader
         title="概览"
-        description="查看当前检测状态，或直接开始一次新的检测。"
-        actions={
-          <Link href="/runs">
-            <Button>
-              <Play className="h-4 w-4" /> 开始检测
-            </Button>
-          </Link>
-        }
+        description="查看当前检测状态与最近检测记录。"
       />
 
       {error && <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">{error}</div>}
@@ -164,18 +158,8 @@ export default function OverviewPage() {
 
       {latest?.status === 'running' && latest.progress && (
         <Link href={`/runs/${latest.id}`} className="panel block rounded-xl px-4 py-3 text-sm transition-colors hover:border-border-strong">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-medium">正在检测 {latest.site?.name ?? `站点 #${latest.siteId}`}</span>
-            <span className="text-xs text-foreground-muted">
-              {latest.progress.queued ? '排队中' : `${latest.progress.done}/${latest.progress.total}`}
-            </span>
-          </div>
-          <div className="mt-2 h-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-500"
-              style={{ width: `${Math.round((latest.progress.done / Math.max(latest.progress.total, 1)) * 100)}%` }}
-            />
-          </div>
+          <div className="mb-2 text-sm font-medium">正在检测 {latest.site?.name ?? `站点 #${latest.siteId}`}</div>
+          <TaskProgressBar progress={latest.progress} />
         </Link>
       )}
     </div>

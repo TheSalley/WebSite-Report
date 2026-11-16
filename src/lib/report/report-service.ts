@@ -184,7 +184,7 @@ export async function buildReportData(taskId: number): Promise<ReportData> {
   const passCount = checkResults.filter((r) => r.status === 'pass').length
   const warnCount = checkResults.filter((r) => r.status === 'warn').length
   const failCount = checkResults.filter((r) => r.status === 'fail').length
-  const skipCount = checkResults.filter((r) => r.status === 'skip').length
+  const skipCount = results.filter((r) => resultKind(r) !== 'artifact' && r.status === 'skip').length
   const verifyCount = results.filter((r) => resultKind(r) === 'deliverable' && r.status === 'verify').length
 
   return {

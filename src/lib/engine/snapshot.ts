@@ -80,6 +80,7 @@ export async function captureSnapshot(page: Page): Promise<PageSnapshot> {
         allHrefs,
         bodyText: text(document.body),
         hasViewport: !!document.querySelector('meta[name="viewport"]'),
+        hasGTranslate: document.getElementById('gt_float_wrapper') !== null,
         charset: (document.characterSet || '').toLowerCase()
       }
     })
@@ -94,6 +95,7 @@ export async function captureSnapshot(page: Page): Promise<PageSnapshot> {
       allHrefs: [],
       bodyText: '',
       hasViewport: false,
+      hasGTranslate: false,
       charset: ''
     }))
 
@@ -121,6 +123,7 @@ export async function captureSnapshot(page: Page): Promise<PageSnapshot> {
     allHrefs: dom.allHrefs,
     bodyText: dom.bodyText,
     hasViewport: dom.hasViewport,
+    hasGTranslate: dom.hasGTranslate,
     charset: dom.charset,
     perf,
     network

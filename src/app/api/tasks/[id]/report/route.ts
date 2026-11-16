@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { buildReportData, buildReportHtml, buildReportPdf } from '@/lib/report/report-service'
 
-/** ISO 时间 → 文件名安全格式：2026-09-15_10-22-43 */
-function formatFileNameTime(iso: string | null | undefined): string {
+/** ISO 时间 → 文件名日期：2026-09-15 */
+function formatFileNameDate(iso: string | null | undefined): string {
   if (!iso) return '未知时间'
   const d = new Date(iso)
   if (isNaN(d.getTime())) return '未知时间'
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 /** 清洗站点名称中的非法文件名字符 */
@@ -28,8 +28,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (url.searchParams.get('format') === 'pdf') {
       const pdf = await buildReportPdf(Number(id))
       const siteName = sanitizeFilename(data.site?.name ?? `任务${id}`)
-      const time = formatFileNameTime(data.task?.startedAt)
-      const filename = `${siteName}-${time}.pdf`
+      const date = formatFileNameDate(data.task?.startedAt)
+      const filename = `${siteName}-网站上线验收报告-${date}.pdf`
       return new NextResponse(new Uint8Array(pdf), {
         headers: {
           'Content-Type': 'application/pdf',

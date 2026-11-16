@@ -13,6 +13,7 @@ export type TaskProgress = {
   phaseName?: string
   phaseIndex?: number
   phaseCount?: number
+  phaseList?: { id: string; name: string }[]
   queued?: boolean
 }
 
@@ -28,6 +29,9 @@ export function statusCounts(results: CheckResult[], key: CheckStatus | 'all'): 
   if (key === 'all') return results.filter((r) => !isArtifactResult(r)).length
   if (key === 'verify') {
     return results.filter((r) => isDeliverableResult(r) && r.status === 'verify').length
+  }
+  if (key === 'skip') {
+    return results.filter((r) => (isCheckResult(r) || isDeliverableResult(r)) && r.status === 'skip').length
   }
   return results.filter((r) => isCheckResult(r) && r.status === key).length
 }

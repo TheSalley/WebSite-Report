@@ -38,8 +38,8 @@ const contractRuleDefs: SeedRule[] = [
   { groupName: GROUP_BUILD, ruleKey: 'content.viewport', name: '响应式设计（移动端 viewport 正确）', description: '全设备自适应，确保手机、电脑浏览体验一致流畅', kind: 'deliverable' },
   { groupName: GROUP_BUILD, ruleKey: 'contract.contact', name: '多转化入口（全局/页内询盘表单）', description: '设置全局与页面内询盘表单，提升转化率', kind: 'deliverable' },
   { groupName: GROUP_BUILD, ruleKey: 'contract.search', name: '全站搜索功能内置可用', description: '内置搜索框，便于用户迅速检索定位站内内容', kind: 'deliverable' },
-  { groupName: GROUP_BUILD, ruleKey: 'compliance.privacy', name: '隐私政策页（海外推广合规）', description: '配置隐私政策页，符合海外推广合规要求' },
-  { groupName: GROUP_BUILD, ruleKey: 'contract.gtranslate', name: 'Google 翻译插件（一键多语言）', description: '免费提供Google内嵌翻译插件，一键实现多语言建站' },
+  { groupName: GROUP_BUILD, ruleKey: 'compliance.privacy', name: '隐私政策页（海外推广合规）', description: '配置隐私政策页，符合海外推广合规要求', kind: 'deliverable' },
+  { groupName: GROUP_BUILD, ruleKey: 'contract.gtranslate', name: 'Google 翻译插件（一键多语言）', description: '免费提供Google内嵌翻译插件，一键实现多语言建站', kind: 'check' },
   { groupName: GROUP_BUILD, ruleKey: 'verify.build.thanks', name: '感谢页跳转跟踪已埋点', description: '精准跟踪转化行为，减少统计误差', kind: 'deliverable' },
 
   // ── 功能与优化 ──

@@ -45,6 +45,7 @@ export async function GET(request: Request) {
             phaseName: run.phaseName,
             phaseIndex: run.phaseIndex,
             phaseCount: run.phaseCount,
+            phaseList: run.phaseList,
             queued: run.queued
           }
         : null

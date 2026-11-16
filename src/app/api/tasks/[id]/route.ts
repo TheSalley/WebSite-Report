@@ -38,6 +38,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
           phaseName: running.phaseName,
           phaseIndex: running.phaseIndex,
           phaseCount: running.phaseCount,
+          phaseList: running.phaseList,
           queued: running.queued
         }
       : null

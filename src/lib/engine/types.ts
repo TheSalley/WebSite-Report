@@ -25,6 +25,8 @@ export interface PageSnapshot {
   bodyText: string
   /** 是否设置 viewport meta */
   hasViewport: boolean
+  /** 是否存在 Google 翻译插件浮动组件（DOM id: gt_float_wrapper） */
+  hasGTranslate: boolean
   /** charset 声明值（小写） */
   charset: string
   /** 页面加载性能指标（ms） */
@@ -61,8 +63,6 @@ export interface RuleContext {
   pageSnapshots?: { url: string; snapshot: PageSnapshot }[]
   /** 规则参数（可配置） */
   params: Record<string, unknown>
-  /** 截图取证：失败/警告时调用，返回保存后的文件路径 */
-  capture: (name: string) => Promise<string | null>
   /** 规则名（供截图文件名） */
   ruleKey: string
   /** 页面实例（用于附加请求） */

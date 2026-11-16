@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, Play, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
 import { Button, Card, Dialog, Empty, PageHeader, Select, Spinner, StatusBadge } from '@/components/ui'
 import { useConfirm } from '@/components/confirm'
+import { TaskProgressBar } from '@/components/task-progress'
 import type { RuleSet, Site } from '@/lib/types'
 import type { TaskRow } from '@/lib/runs-view'
 import { fmtTime } from '@/lib/runs-view'
@@ -173,9 +174,6 @@ export default function RunsPage() {
         ) : (
           <Card className="divide-y divide-border overflow-hidden">
             {tasks.map((task) => {
-              const progress = task.progress && !task.progress.queued
-                ? Math.round((task.progress.done / Math.max(task.progress.total, 1)) * 100)
-                : 0
               return (
                 <div key={task.id} className="group grid gap-3 px-4 py-3.5 transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                   <Link href={`/runs/${task.id}`} className="min-w-0">
@@ -186,13 +184,8 @@ export default function RunsPage() {
                     </div>
                     <div className="mt-0.5 truncate text-xs text-foreground-subtle">{displayUrl(task.site?.url ?? '')}</div>
                     {task.status === 'running' && task.progress && (
-                      <div className="mt-2 flex max-w-md items-center gap-2">
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">
-                          <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${progress}%` }} />
-                        </div>
-                        <span className="shrink-0 text-[11px] tabular-nums text-foreground-subtle">
-                          {task.progress.queued ? '排队中' : `${task.progress.done}/${task.progress.total}`}
-                        </span>
+                      <div className="max-w-md">
+                        <TaskProgressBar progress={task.progress} compact />
                       </div>
                     )}
                   </Link>

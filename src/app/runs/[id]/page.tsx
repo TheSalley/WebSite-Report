@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { Button, Card, Empty, Input, PageHeader, Select, Spinner, StatusBadge } from '@/components/ui'
 import { useConfirm } from '@/components/confirm'
+import { TaskProgressBar } from '@/components/task-progress'
 import type { CheckResult, CheckStatus } from '@/lib/types'
 import type { TaskRow } from '@/lib/runs-view'
 import { fmtTime, groupResultsByPage, psShotUrl, STATUS_FILTERS, statusCounts } from '@/lib/runs-view'
@@ -199,7 +200,12 @@ export default function TaskDetailPage() {
   const deliverableResults = results.filter(isDeliverableResult)
   const artifactResults = results.filter(isArtifactResult)
   const visibleChecks = checkResults.filter((result) => statusFilter === 'all' || result.status === statusFilter)
-  const visibleDeliverables = deliverableResults.filter((result) => statusFilter === 'all' || (statusFilter === 'verify' && result.status === 'verify'))
+  const visibleDeliverables = deliverableResults.filter(
+    (result) =>
+      statusFilter === 'all' ||
+      (statusFilter === 'verify' && result.status === 'verify') ||
+      (statusFilter === 'skip' && result.status === 'skip')
+  )
   const psShots = results.some((r) => isArtifactResult(r) && r.ruleKey === 'artifact.pagespeed.shots')
   const hasDrafts = Object.keys(deliverableDrafts).length > 0
   const pages = groupResultsByPage(checkResults)
@@ -272,19 +278,8 @@ export default function TaskDetailPage() {
         </div>
 
         {task.status === 'running' && task.progress && (
-          <div className="border-t border-border bg-primary-soft/50 px-5 py-3">
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="font-medium text-primary-soft-foreground">
-                {task.progress.queued ? '排队中，等待空闲任务位' : `${task.progress.phaseName ?? '检测中'} · ${task.progress.done}/${task.progress.total}`}
-              </span>
-              <span className="truncate text-foreground-muted">{task.progress.ruleName}</span>
-            </div>
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/70 dark:bg-white/10">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-500"
-                style={{ width: `${Math.round((task.progress.done / Math.max(task.progress.total, 1)) * 100)}%` }}
-              />
-            </div>
+          <div className="border-t border-border bg-primary-soft/50 px-5 py-3.5">
+            <TaskProgressBar progress={task.progress} />
           </div>
         )}
       </Card>

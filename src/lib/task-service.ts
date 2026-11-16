@@ -7,6 +7,7 @@ import { runTask, shutdownEngine } from './engine/runner'
 import { buildPageSet, type PageSetResult } from './engine/page-set'
 import { countResults } from './engine/scoring'
 import { capturePagespeedShots } from './pagespeed-shots'
+import { skipByDefault } from './deliverable-defaults'
 import {
   createTask,
   getTask,
@@ -35,6 +36,12 @@ export interface TaskPhase {
   total: number
 }
 
+/** 阶段元信息（供前端绘制阶段进度条） */
+export interface TaskPhaseInfo {
+  id: TaskPhaseId
+  name: string
+}
+
 /** 运行中任务的状态（进程内存） */
 export interface RunningTaskState {
   taskId: number
@@ -47,6 +54,8 @@ export interface RunningTaskState {
   phaseIndex: number
   /** 阶段总数 */
   phaseCount: number
+  /** 完整阶段列表（供前端展示阶段步骤） */
+  phaseList: TaskPhaseInfo[]
   /** 当前阶段进度 */
   done: number
   total: number
@@ -92,6 +101,7 @@ function artifactResult(
 
 /** 合同文案结果：不打开页面检测，直接生成待验收记录 */
 function deliverableResult(rule: RuleRow, taskId: number): Omit<CheckResultRow, 'id'> {
+  const skipped = skipByDefault(rule.ruleKey)
   return {
     taskId,
     ruleId: rule.id,
@@ -100,10 +110,10 @@ function deliverableResult(rule: RuleRow, taskId: number): Omit<CheckResultRow, 
     groupName: rule.groupName,
     kind: 'deliverable',
     pageUrl: '',
-    status: 'verify',
-    actualValue: '待人工验收',
+    status: skipped ? 'skip' : 'verify',
+    actualValue: skipped ? '默认跳过' : '待人工验收',
     expectedValue: '按合同约定完成并确认',
-    description: rule.description?.trim() || '人工交付项，需验收人员确认后更新状态',
+    description: rule.description?.trim() || (skipped ? '该交付项默认跳过，可在详情中恢复为待验收' : '人工交付项，需验收人员确认后更新状态'),
     deliverable: rule.deliverable ?? '',
     screenshotPath: null,
     note: '',
@@ -204,6 +214,7 @@ export async function startTask(siteId: number, ruleSetId: number): Promise<numb
     phaseName: '排队中',
     phaseIndex: 0,
     phaseCount: 0,
+    phaseList: [],
     done: 0,
     total: 0,
     queued: true,
@@ -252,6 +263,9 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
     if (hasDetection) phases.push({ id: 'detect', name: '规则检测', done: 0, total: 0 })
     if (hasPagespeedShot) phases.push({ id: 'pagespeed', name: 'PageSpeed 截图', done: 0, total: 0 })
     state.phaseCount = phases.length
+    state.phaseList = phases.map((p) => ({ id: p.id, name: p.name }))
+    // 仅合同文案等无浏览器阶段的任务：直接展示收尾状态
+    if (phases.length === 0) state.phaseName = '保存结果'
     let phaseCursor = 0
     /** 进入阶段：重置进度与当前规则，避免跨阶段跳变 */
     const enterPhase = (id: TaskPhaseId, name: string, done: number, total: number): void => {
@@ -336,7 +350,6 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
               contentCounts: pageSetResult.contentCounts
             }
           : undefined,
-        screenshotBaseDir: join(DATA_DIR, 'screenshots'),
         signal: state.signal,
         onProgress: (done, total, ruleName, ruleKey, status) => {
           state.done = done

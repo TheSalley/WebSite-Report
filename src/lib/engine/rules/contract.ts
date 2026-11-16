@@ -61,20 +61,23 @@ export const contractRules: Record<string, RuleHandler> = {
   },
 
   /** Google 翻译插件（多语言） */
-  'contract.gtranslate': async ({ page }) => {
-    try {
-      const has = await page!.evaluate(() => {
-        const html = (document.documentElement.outerHTML || '').slice(0, 300000)
-        return document.querySelector('.goog-te-gadget, #google_translate_element, .google-translate') !== null || /translate\.google\.com|google_translate|goog-te-banner/i.test(html)
-      })
-      return {
-        status: has ? 'pass' : 'warn',
-        actual: has ? '已发现翻译组件' : '未发现翻译组件',
-        expected: '嵌入 Google 翻译插件（一键多语言）',
-        description: has ? '站点提供 Google 翻译能力' : '未检测到 Google 翻译插件，请人工确认是否配置'
-      }
-    } catch {
-      return { status: 'warn', actual: '检测失败', expected: '存在翻译插件', description: '翻译插件检测执行异常，请人工确认' }
+  'contract.gtranslate': async ({ snapshot, page }) => {
+    // 以插件实际注入的浮动容器（id=gt_float_wrapper）为唯一判定依据；
+    // 快照未命中时短暂等待，避免插件脚本异步注入导致误判
+    let found = snapshot.hasGTranslate
+    if (!found && page) {
+      found = await page
+        .waitForSelector('#gt_float_wrapper', { state: 'attached', timeout: 2000 })
+        .then(() => true)
+        .catch(() => false)
+    }
+    return {
+      status: found ? 'pass' : 'fail',
+      actual: found ? '已发现 #gt_float_wrapper' : '未发现 #gt_float_wrapper',
+      expected: '页面存在 Google 翻译插件容器（id=gt_float_wrapper）',
+      description: found
+        ? '已安装 Google 翻译插件'
+        : '未检测到 Google 翻译插件：页面中不存在 id 为 gt_float_wrapper 的元素'
     }
   }
 }

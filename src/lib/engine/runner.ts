@@ -1,11 +1,8 @@
 import { newPage, closeBrowser } from './browser'
 import { attachNetworkCollector } from './network-collector'
 import { captureSnapshot } from './snapshot'
-import { ScreenshotManager } from './screenshot-manager'
 import { getRuleHandler } from './rules'
 import { countResults, type ResultCounts } from './scoring'
-import { join } from 'path'
-import { tmpdir } from 'os'
 import type { PageSnapshot, RuleContext, RuleOutcome } from './types'
 import type { CheckStatus, SiteDataByRuleKey, SitemapContentCounts } from '../types'
 import { logInfo, logWarn, logError } from '../logger'
@@ -19,8 +16,6 @@ export interface RunTaskOptions {
   snapshotPages?: string[]
   rules: { id: number; ruleKey: string; name: string; groupName: string; enabled: boolean; description?: string; deliverable?: string; scope?: 'page' | 'site'; kind?: 'check' | 'deliverable' | 'artifact'; params: Record<string, unknown> }[]
   taskId: number
-  /** 截图根目录（默认临时目录 web-report-screenshots） */
-  screenshotBaseDir?: string
   /** 取消信号 */
   signal?: { cancelled: boolean }
   /** 每完成一条规则的进度回调 */
@@ -107,8 +102,6 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
     `开始检测任务 taskId=${taskId} 页面数=${pages.length} 补充快照=${snapshotExtra.length} 启用规则数=${enabledRules.length}（共 ${total} 项）`,
     taskId
   )
-  const baseDir = options.screenshotBaseDir ?? join(tmpdir(), 'web-report-screenshots')
-  const screenshotManager = new ScreenshotManager(taskId, baseDir)
   const results: RunRuleResult[] = []
 
   /** 结果说明：优先取规则配置的 description（合同条款），否则用引擎动态描述 */
@@ -180,7 +173,6 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
         ruleKey: '',
         page,
         request: page.context().request,
-        capture: (name: string) => screenshotManager.capture(page, pi === 0 ? name : `p${pi}-${name}`)
       }
 
       // 逐条执行页面级规则（该页）
@@ -216,12 +208,6 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           }
         }
 
-        // 机器检测失败/警告 → 截屏取证
-        let screenshotPath: string | null = null
-        if (outcome.status === 'fail' || outcome.status === 'warn') {
-          screenshotPath = await screenshotManager.capture(page, pi === 0 ? rule.ruleKey : `p${pi}-${rule.ruleKey}`)
-        }
-
         results.push({
           ruleId: rule.id,
           ruleKey: rule.ruleKey,
@@ -234,7 +220,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
           expectedValue: outcome.expected,
           description: desc(rule, outcome.description),
           deliverable: rule.deliverable ?? '',
-          screenshotPath,
+          screenshotPath: null,
           note: ''
         })
         done++
@@ -275,8 +261,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunResult> {
       pageSet: options.sitePageSet,
       pageSnapshots,
       params: {},
-      ruleKey: '',
-      capture: async () => null
+      ruleKey: ''
     }
     for (const rule of siteRules) {
       if (options.signal?.cancelled) {

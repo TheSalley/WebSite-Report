@@ -137,6 +137,8 @@ export function getDb(): DatabaseSync {
     migrateWpSitemapLabels(db)
     migrateDeliveryRuleSetDescription(db)
     migrateContractDeliverableKinds(db)
+    migrateGTranslateCheck(db)
+    migratePrivacyPolicyDeliverable(db)
     removeDefaultPassBypass(db)
     migrateLogsFromFiles(db)
     // PSI API Key 配置已下线：清理历史遗留密钥
@@ -466,6 +468,45 @@ function migrateContractDeliverableKinds(sqlite: DatabaseSync): void {
   sqlite.exec('BEGIN')
   try {
     for (const key of keys) update.run(key)
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
+
+/**
+ * Google 翻译插件属于可机器验证项：以页面是否存在 #gt_float_wrapper 为准。
+ * 历史数据库中该规则可能被标记为合同文案，这里统一修正为机器检测。
+ */
+function migrateGTranslateCheck(sqlite: DatabaseSync): void {
+  const marker = 'migration.gtranslateCheck.v1'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+  sqlite.exec('BEGIN')
+  try {
+    sqlite
+      .prepare("UPDATE rules SET kind = 'check' WHERE ruleKey = 'contract.gtranslate' AND kind != 'check'")
+      .run()
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
+
+/** 隐私政策页属于合同交付项，由人工验收，不参与机器检测 */
+function migratePrivacyPolicyDeliverable(sqlite: DatabaseSync): void {
+  const marker = 'migration.privacyPolicyDeliverable.v1'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+  sqlite.exec('BEGIN')
+  try {
+    sqlite
+      .prepare("UPDATE rules SET kind = 'deliverable' WHERE ruleKey = 'compliance.privacy' AND kind != 'deliverable'")
+      .run()
     sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
     sqlite.exec('COMMIT')
   } catch (err) {

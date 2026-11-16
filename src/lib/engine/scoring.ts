@@ -24,6 +24,7 @@ export function countResults(results: { status: CheckStatus; kind?: RuleKind; ru
     // 合同文案只做人工确认，不计入机器检测通过率
     if (kind === 'deliverable') {
       if (r.status === 'verify') counts.verifyCount++
+      else if (r.status === 'skip') counts.skipCount++
       continue
     }
     // 机器检测被人工改为「待验收」时，仅计入待验收
