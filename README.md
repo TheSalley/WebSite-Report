@@ -38,6 +38,17 @@ npm run dev
 
 数据默认保存在 `web-report-data/`，SQLite 数据库为 `reports.db`。
 
+### 从 realsite.db 迁移旧数据
+
+如果数据目录里还留着旧版 `realsite.db`，执行一次合并脚本即可：站点按 URL 去重，规则按 `规则集 + ruleKey` 去重，任务与检测结果保留原 ID，现有 `reports.db` 数据不会被覆盖。迁移前会自动备份到 `web-report-data/backups/`。
+
+```bash
+node scripts/migrate-realsite-to-reports.mjs --dry-run   # 先空跑确认统计
+node scripts/migrate-realsite-to-reports.mjs             # 正式写入
+```
+
+迁移成功后旧文件不会自动删除，确认 `reports.db` 数据正常后可自行移除 `realsite.db` 及其 `-wal`/`-shm` 文件。
+
 ## 服务器部署
 
 ```bash

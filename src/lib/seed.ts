@@ -48,7 +48,7 @@ const contractRuleDefs: SeedRule[] = [
   {
     groupName: GROUP_BUILD,
     ruleKey: 'verify.build.banner',
-    name: 'Banner 创意设计(3 张)',
+    name: 'Banner 创意设计',
     description: '由专业设计师操刀，融合品牌调性，提升首页视觉冲击力与用户停留时长',
     deliverable: '✅',
     kind: 'deliverable'
@@ -64,7 +64,7 @@ const contractRuleDefs: SeedRule[] = [
   {
     groupName: GROUP_BUILD,
     ruleKey: 'content.viewport',
-    name: '响应式设计（移动端 viewport 正确）',
+    name: '响应式设计',
     description: '全设备自适应，确保手机、电脑浏览体验一致流畅',
     deliverable: '✅',
     kind: 'deliverable'
@@ -377,7 +377,7 @@ export const CONTRACT_REPORT_ITEMS: ReadonlyArray<{
   {
     groupName: GROUP_BUILD,
     ruleKey: 'verify.build.banner',
-    name: 'Banner 创意设计(3 张)',
+    name: 'Banner 创意设计',
     description: '由专业设计师操刀，融合品牌调性，提升首页视觉冲击力与用户停留时长',
     deliverable: '✅'
   },
@@ -391,7 +391,7 @@ export const CONTRACT_REPORT_ITEMS: ReadonlyArray<{
   {
     groupName: GROUP_BUILD,
     ruleKey: 'content.viewport',
-    name: '响应式设计（移动端 viewport 正确）',
+    name: '响应式设计',
     description: '全设备自适应，确保手机、电脑浏览体验一致流畅',
     deliverable: '✅'
   },

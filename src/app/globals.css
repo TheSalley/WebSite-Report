@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tailwind v4 会自动扫描整个项目；排除运行时数据目录，避免读取被 SQLite 锁定的 .db / -shm / -wal 文件。 */
+@source not "../../web-report-data";
+
 /* class 策略暗色模式（配合主题切换按钮） */
 @custom-variant dark (&:where(.dark, .dark *));
 
