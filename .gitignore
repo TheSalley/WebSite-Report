@@ -41,4 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 # runtime data (sqlite db / logs / screenshots / legacy json)
+# 运行时数据不入库：SQLite 数据库（含 -wal/-shm）、截图、备份
 /web-report-data/
+
