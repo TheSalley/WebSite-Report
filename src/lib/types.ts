@@ -135,9 +135,9 @@ export interface TaskPageSet {
   locTotal: number
   /** 页面/新闻/产品数量（taxonomy、用户、其他 CPT 不计入） */
   contentCounts?: SitemapContentCounts
-  /** 按 sitemap 内容链接逐页检查的数量（H1、隐藏板块使用） */
+  /** 按 sitemap 内容链接逐页检查的数量（H1、隐藏板块、No-Index 使用） */
   contentPageCount?: number
-  /** 本次任务是否按 sitemap 内容链接逐页采集了快照（H1 / 隐藏板块） */
+  /** 本次任务是否按 sitemap 内容链接逐页采集了快照（H1 / 隐藏板块 / No-Index） */
   contentCheck?: boolean
   /** 去重后的代表页（主页优先） */
   representatives: TaskPageSetPage[]

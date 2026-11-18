@@ -1,35 +1,123 @@
 import type { RuleHandler } from '../types'
 import { collectSitemapGroups, countSitemapContent, getSitemapUrls, WP_SITEMAP_PATH } from '../page-set'
-import { displayUrl } from '../../display'
+import { displayUrl, pagePathShort } from '../../display'
+
+/** 提取页面输出 noindex 的来源（meta robots / googlebot / bingbot、X-Robots-Tag） */
+function noindexSources(snapshot: {
+  metas?: Record<string, string>
+  network?: { mainResponseHeaders?: Record<string, string> }
+}): string[] {
+  const metas = snapshot.metas ?? {}
+  const headers = snapshot.network?.mainResponseHeaders ?? {}
+  const hasNoindex = (value: string): boolean =>
+    value
+      .toLowerCase()
+      .split(/[\s,;]+/)
+      .some((token) => token === 'noindex' || token === 'none')
+  const metaTags = ['robots', 'googlebot', 'bingbot']
+  return [
+    ...metaTags.filter((name) => hasNoindex(metas[name] ?? '')).map((name) => `meta ${name}`),
+    ...(hasNoindex(headers['x-robots-tag'] ?? '') ? ['X-Robots-Tag'] : [])
+  ]
+}
+
+/** 提取首页 favicon 链接（兼容 shortcut icon / apple-touch-icon） */
+function faviconHref(links: Record<string, string>): string {
+  for (const [rel, href] of Object.entries(links)) {
+    if (!href) continue
+    const rels = rel.toLowerCase().split(/\s+/)
+    if (rels.includes('icon') || rels.includes('apple-touch-icon')) return href
+  }
+  return ''
+}
+
+/** 将 favicon 相对链接解析为展示用 URL */
+function faviconLabel(href: string, baseUrl: string): string {
+  try {
+    return displayUrl(new URL(href, baseUrl).toString())
+  } catch {
+    return displayUrl(href)
+  }
+}
 
 export const seoRules: Record<string, RuleHandler> = {
-  'seo.noindex.disabled': async ({ snapshot }) => {
-    const hasNoindex = (value: string): boolean =>
-      value
-        .toLowerCase()
-        .split(/[\s,;]+/)
-        .some((token) => token === 'noindex' || token === 'none')
-    const metaTags = ['robots', 'googlebot', 'bingbot']
-    const blockedBy = [
-      ...metaTags
-        .filter((name) => hasNoindex(snapshot.metas[name] ?? ''))
-        .map((name) => `meta ${name}`),
-      ...(hasNoindex(snapshot.network.mainResponseHeaders['x-robots-tag'] ?? '') ? ['X-Robots-Tag'] : [])
-    ]
-
-    if (blockedBy.length > 0) {
+  'seo.noindex.disabled': async ({ snapshot, pageSnapshots }) => {
+    const pages = pageSnapshots?.length
+      ? pageSnapshots
+      : snapshot.metas && snapshot.network
+        ? [{ url: snapshot.finalUrl, snapshot }]
+        : []
+    if (pages.length === 0) {
       return {
         status: 'fail',
-        actual: `${blockedBy.join('、')} 输出 noindex`,
+        actual: '无页面数据',
+        expected: '至少 1 个页面可检测',
+        description: '未采集到页面快照，无法检查 No-Index'
+      }
+    }
+    const blocked = pages
+      .map((page) => ({ url: pagePathShort(page.url), blockedBy: noindexSources(page.snapshot) }))
+      .filter((page) => page.blockedBy.length > 0)
+    if (blocked.length > 0) {
+      const detail = blocked
+        .slice(0, 8)
+        .map((page) => `${page.url}（${page.blockedBy.join('、')}）`)
+        .join('；')
+      return {
+        status: 'fail',
+        actual: `${blocked.length}/${pages.length} 页输出 noindex`,
         expected: '未输出 noindex（允许搜索引擎收录）',
-        description: 'No-Index 未关闭，搜索引擎将不会收录该页面；请移除 robots meta / X-Robots-Tag 中的 noindex 设置'
+        description: `No-Index 未关闭，搜索引擎将不会收录这些页面：${detail}${blocked.length > 8 ? ` 等 ${blocked.length} 个页面` : ''}；请移除 robots meta / X-Robots-Tag 中的 noindex 设置`
       }
     }
     return {
       status: 'pass',
-      actual: '未发现 noindex',
+      actual: `${pages.length} 页未发现 noindex`,
       expected: '未输出 noindex（允许搜索引擎收录）',
-      description: 'No-Index 已关闭，页面可正常被搜索引擎收录'
+      description: `全部 ${pages.length} 个页面均未输出 noindex，页面可正常被搜索引擎收录`
+    }
+  },
+
+  /** 站点级：检查首页浏览器标签页所需的 Title 与 Favicon */
+  'seo.site.title-favicon': async ({ pageSnapshots }) => {
+    const home = pageSnapshots?.[0]?.snapshot
+    if (!home) {
+      return {
+        status: 'fail',
+        actual: '首页未加载',
+        expected: '首页站点 Title 与 Favicon 可检测',
+        description: '首页页面加载失败，无法检查站点 Title 与 Favicon'
+      }
+    }
+
+    const title = home.title.replace(/\s+/g, ' ').trim()
+    const icon = faviconHref(home.links)
+    const titleText = title ? `Title：“${title.slice(0, 80)}${title.length > 80 ? '…' : ''}”` : 'Title 未设置'
+    const iconUrl = icon ? faviconLabel(icon, home.finalUrl) : ''
+    const iconText = iconUrl ? `Favicon：${iconUrl.slice(0, 120)}${iconUrl.length > 120 ? '…' : ''}` : 'Favicon 未设置'
+    const actual = `${titleText}；${iconText}`
+
+    if (title && icon) {
+      return {
+        status: 'pass',
+        actual,
+        expected: '首页设置非空站点 Title 和 Favicon',
+        description: '首页站点 Title 与 Favicon 均已配置'
+      }
+    }
+
+    const description =
+      !title && !icon
+        ? '首页未设置站点 Title，且未发现 Favicon'
+        : !title
+          ? '首页未设置站点 Title，已配置 Favicon；请补充 <title>'
+          : '首页已设置站点 Title，但未发现 Favicon；请在 <head> 中添加 <link rel="icon" href="...">'
+
+    return {
+      status: 'fail',
+      actual,
+      expected: '首页设置非空站点 Title 和 Favicon',
+      description
     }
   },
 

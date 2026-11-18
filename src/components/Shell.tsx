@@ -13,7 +13,7 @@ const navItems = [
   { href: '/reports/settings', label: '报告设置', icon: Settings }
 ]
 
-export default function Shell({ children }: { children: React.ReactNode }) {
+export default function Shell({ children, version }: { children: React.ReactNode; version: string }) {
   const pathname = usePathname()
 
   const isActive = (href: string) => {
@@ -53,7 +53,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
         <div className="flex items-center justify-between border-t border-border p-3">
           <ThemeToggle />
-          <span className="text-[11px] text-foreground-subtle">本地检测</span>
+          <span className="flex items-center gap-1.5 text-[11px] text-foreground-subtle">
+            <span>本地检测</span>
+            <span>v{version}</span>
+          </span>
         </div>
       </aside>
 

@@ -248,9 +248,21 @@ const contractRuleDefs: SeedRule[] = [
 
 /** 网站交付检查规则：交付前质量检查，全部由机器检测 */
 const deliveryRuleDefs: SeedRule[] = [
-  { groupName: GROUP_DELIVERY_SITE, ruleKey: 'delivery.sitemap', name: 'Sitemap 检查（wp-sitemap.xml 可访问/有效）', scope: 'site' },
-  { groupName: GROUP_DELIVERY_PAGE, ruleKey: 'delivery.h1.count', name: 'H1 标签检查（全站页面汇总）', scope: 'site' },
-  { groupName: GROUP_DELIVERY_ELEMENTOR, ruleKey: 'delivery.elementor.hidden-both', name: 'Elementor 隐藏板块检查（全站页面汇总）', scope: 'site' }
+  { groupName: GROUP_DELIVERY_SITE, ruleKey: 'delivery.sitemap', name: 'Sitemap 检查', scope: 'site' },
+  { groupName: GROUP_DELIVERY_PAGE, ruleKey: 'delivery.h1.count', name: 'H1 标签检查', scope: 'site' },
+  { groupName: GROUP_DELIVERY_ELEMENTOR, ruleKey: 'delivery.elementor.hidden-both', name: 'Elementor 隐藏板块检查', scope: 'site' },
+  {
+    groupName: GROUP_DELIVERY_PAGE,
+    ruleKey: 'seo.noindex.disabled',
+    name: 'No-Index 检查',
+    scope: 'site'
+  },
+  {
+    groupName: GROUP_DELIVERY_PAGE,
+    ruleKey: 'seo.site.title-favicon',
+    name: '站点 Title / Favicon 检查（首页）',
+    scope: 'site'
+  }
 ]
 /** 内置规则集定义 */
 export interface BuiltinRuleSetDef {
@@ -270,7 +282,7 @@ export const BUILTIN_RULE_SETS: BuiltinRuleSetDef[] = [
   },
   {
     name: '网站交付检查',
-    description: '网站交付前的质量检查：验证 H1 标题存在且唯一，扫描 Elementor 板块是否残留同时隐藏于桌面与移动端的元素；H1 与隐藏板块按 wp-sitemap.xml 的页面/新闻/产品链接逐页检查，其他页面级规则按模板去重取代表页。',
+    description: '网站交付前的质量检查：验证 H1 标题存在且唯一，检查首页站点 Title / Favicon 与全站 No-Index，扫描 Elementor 板块是否残留同时隐藏于桌面与移动端的元素；H1、No-Index 与隐藏板块按 wp-sitemap.xml 的页面/新闻/产品链接逐页检查，其他页面级规则按模板去重取代表页。',
     scanPages: true,
     rules: deliveryRuleDefs
   }
@@ -558,6 +570,7 @@ export const DELIVERABLE_PRESETS: Record<string, string> = {
   'seo.robots.txt': 'robots.txt 可正常访问',
   'seo.sitemap.xml': '站点地图可正常访问（含页面/新闻/产品）',
   'seo.noindex.disabled': 'No-Index 已关闭，页面可正常被搜索引擎收录',
+  'seo.site.title-favicon': '首页站点 Title 与 Favicon 已配置',
   'seo.h1.exists': 'H1 标题唯一且已配置',
   'verify.optimize.html': 'URL/Title/H1/Alt/Meta 已完成自定义优化',
   'verify.optimize.server': 'AWS 海外服务器已交付（2vCPU/8GB/20GB）',

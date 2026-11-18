@@ -69,8 +69,8 @@ export interface RunningTaskState {
 
 const runningTasks = new Map<number, RunningTaskState>()
 
-/** 需要按 sitemap 内容链接逐页检查的站点级规则（H1、Elementor 隐藏板块） */
-const CONTENT_SNAPSHOT_RULE_KEYS = new Set(['delivery.h1.count', 'delivery.elementor.hidden-both'])
+/** 需要按 sitemap 内容链接逐页检查的站点级规则（H1、Elementor 隐藏板块、No-Index） */
+const CONTENT_SNAPSHOT_RULE_KEYS = new Set(['delivery.h1.count', 'delivery.elementor.hidden-both', 'seo.noindex.disabled'])
 
 /** 功能产物结果（如 PageSpeed 截图）：与检测结果同表保存，但不参与通过/失败统计 */
 function artifactResult(
@@ -254,7 +254,7 @@ async function runInBackground(taskId: number, url: string, scanPages: boolean, 
     const hasPagespeedShot = Boolean(shotRule)
     const needsContentSnapshots = checkRules.some((r) => CONTENT_SNAPSHOT_RULE_KEYS.has(r.ruleKey))
     const pageRuleCount = checkRules.filter((r) => r.scope !== 'site').length
-    // 没有页面级规则时无需模板代表页；H1/隐藏板块直接按 sitemap 内容链接逐页检查
+    // 没有页面级规则时无需模板代表页；H1/隐藏板块/No-Index 直接按 sitemap 内容链接逐页检查
     const collectRepresentatives = scanPages && pageRuleCount > 0
     const shouldEnumerate = hasDetection && (scanPages || needsContentSnapshots)
     // 阶段序列：枚举 → 规则检测 → PageSpeed 截图（按规则集配置裁剪）

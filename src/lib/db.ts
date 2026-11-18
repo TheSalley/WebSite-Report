@@ -2,6 +2,9 @@ import { mkdirSync, readFileSync, existsSync, readdirSync, renameSync } from 'fs
 import { join } from 'path'
 import { DatabaseSync } from 'node:sqlite'
 import { BUILTIN_RULE_SETS, DELIVERABLE_PRESETS, toRuleRows } from './seed'
+import { countResults } from './engine/scoring'
+import type { CheckStatus, RuleKind } from './types'
+import { pagePathShort } from './display'
 
 /** 数据文件存储根目录（本地 web-report-data） */
 export const DATA_DIR = process.env.WEBREPORT_DATA_DIR ?? join(process.cwd(), 'web-report-data')
@@ -136,6 +139,10 @@ export function getDb(): DatabaseSync {
     migratePagespeedScoreToShots(db)
     migrateWpSitemapLabels(db)
     migrateDeliveryRuleSetDescription(db)
+    migrateAddNoIndexRule(db)
+    migrateNoIndexRuleScope(db)
+    migrateNoIndexResults(db)
+    migrateAddSiteTitleFaviconRule(db)
     migrateContractDeliverableKinds(db)
     migrateGTranslateCheck(db)
     migratePrivacyPolicyDeliverable(db)
@@ -447,6 +454,240 @@ function migrateDeliveryRuleSetDescription(sqlite: DatabaseSync): void {
     sqlite
       .prepare('UPDATE rule_sets SET description = ? WHERE name = ? AND description = ?')
       .run(newText, '网站交付检查', oldText)
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
+
+
+/**
+ * 新增 No-Index 功能检测规则：写入内置「网站交付检查」的页面基础分组。
+ * 仅在规则缺失时插入，避免覆盖用户对规则集的后续调整。
+ */
+function migrateAddNoIndexRule(sqlite: DatabaseSync): void {
+  const marker = 'migration.noIndexRule.v1'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+
+  const def = BUILTIN_RULE_SETS.find((item) => item.name === '网站交付检查')
+  const seed = def?.rules.find((rule) => rule.ruleKey === 'seo.noindex.disabled')
+  const rs = sqlite
+    .prepare('SELECT id FROM rule_sets WHERE name = ? AND isBuiltin = 1')
+    .get('网站交付检查') as { id: number } | undefined
+
+  sqlite.exec('BEGIN')
+  try {
+    if (rs && seed) {
+      const exists = sqlite
+        .prepare('SELECT 1 AS found FROM rules WHERE ruleSetId = ? AND ruleKey = ?')
+        .get(rs.id, seed.ruleKey) as SqlRow | undefined
+      if (!exists) {
+        const nextSort = sqlite
+          .prepare('SELECT COALESCE(MAX(sortOrder), -1) + 1 AS n FROM rules WHERE ruleSetId = ?')
+          .get(rs.id) as SqlRow
+        sqlite
+          .prepare(
+            `INSERT INTO rules (ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, scope, kind, params, sortOrder)
+             VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            rs.id,
+            seed.groupName,
+            seed.ruleKey,
+            seed.name,
+            seed.description ?? null,
+            seed.deliverable ?? DELIVERABLE_PRESETS[seed.ruleKey] ?? '',
+            seed.scope ?? 'page',
+            seed.kind ?? 'check',
+            JSON.stringify(seed.params ?? {}),
+            num(nextSort.n)
+          )
+      }
+      if (def) {
+        const oldDescription =
+          '网站交付前的质量检查：验证 H1 标题存在且唯一，扫描 Elementor 板块是否残留同时隐藏于桌面与移动端的元素；H1 与隐藏板块按 wp-sitemap.xml 的页面/新闻/产品链接逐页检查，其他页面级规则按模板去重取代表页。'
+        sqlite
+          .prepare('UPDATE rule_sets SET description = ?, updatedAt = ? WHERE id = ? AND description = ?')
+          .run(def.description, new Date().toISOString(), rs.id, oldDescription)
+      }
+    }
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
+
+
+/** No-Index 改为站点级汇总规则后，同步历史规则配置，并让检测说明使用聚合结果 */
+function migrateNoIndexRuleScope(sqlite: DatabaseSync): void {
+  const marker = 'migration.noIndexRuleScope.v3'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+
+  sqlite.exec('BEGIN')
+  try {
+    sqlite.prepare("UPDATE rules SET scope = 'site' WHERE ruleKey = 'seo.noindex.disabled' AND scope != 'site'").run()
+    sqlite.prepare("UPDATE rules SET description = NULL WHERE ruleKey = 'seo.noindex.disabled'").run()
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
+
+
+/** 合并旧版 No-Index 按代表页产生的多条结果，并重算任务统计 */
+function migrateNoIndexResults(sqlite: DatabaseSync): void {
+  const marker = 'migration.noIndexResults.v1'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+
+  const groups = sqlite
+    .prepare(
+      `SELECT taskId
+       FROM check_results
+       WHERE ruleKey = 'seo.noindex.disabled'
+       GROUP BY taskId
+       HAVING COUNT(*) > 1`
+    )
+    .all() as SqlRow[]
+  const selectRows = sqlite.prepare(
+    `SELECT id, pageUrl, status
+     FROM check_results
+     WHERE taskId = ? AND ruleKey = 'seo.noindex.disabled'
+     ORDER BY id`
+  )
+  const siteUrl = sqlite.prepare('SELECT s.url AS url FROM sites s JOIN tasks t ON t.siteId = s.id WHERE t.id = ?')
+  const update = sqlite.prepare(
+    'UPDATE check_results SET pageUrl = ?, status = ?, actualValue = ?, expectedValue = ?, description = ? WHERE id = ?'
+  )
+  const remove = sqlite.prepare('DELETE FROM check_results WHERE id = ?')
+  const remainingResults = sqlite.prepare('SELECT status, kind, ruleKey FROM check_results WHERE taskId = ?')
+  const updateCounts = sqlite.prepare(
+    'UPDATE tasks SET passCount = ?, warnCount = ?, failCount = ?, skipCount = ?, verifyCount = ? WHERE id = ?'
+  )
+
+  sqlite.exec('BEGIN')
+  try {
+    for (const group of groups) {
+      const taskId = num(group.taskId)
+      const rows = selectRows.all(taskId) as SqlRow[]
+      if (rows.length <= 1) continue
+
+      const statuses = rows.map((row) => str(row.status))
+      const has = (status: string) => statuses.includes(status)
+      const overall = has('fail') ? 'fail' : has('warn') ? 'warn' : has('pass') ? 'pass' : has('verify') ? 'verify' : 'skip'
+      const affected = rows
+        .filter((row) => str(row.status) === (overall === 'pass' ? 'pass' : overall))
+        .map((row) => pagePathShort(str(row.pageUrl)))
+      const list =
+        affected.length === 0
+          ? '无'
+          : affected.slice(0, 8).join('、') + (affected.length > 8 ? ` 等 ${affected.length} 页` : '')
+      const actual =
+        overall === 'fail'
+          ? `${affected.length}/${rows.length} 页输出 noindex`
+          : overall === 'warn'
+            ? `${affected.length}/${rows.length} 页需检查`
+            : overall === 'pass'
+              ? `${rows.length} 页未发现 noindex`
+              : overall === 'verify'
+                ? `${rows.length} 页待验收`
+                : `${rows.length} 页未执行`
+      const description =
+        overall === 'fail' || overall === 'warn'
+          ? `No-Index 未关闭，搜索引擎将不会收录这些页面：${list}；请移除 robots meta / X-Robots-Tag 中的 noindex 设置`
+          : overall === 'pass'
+            ? `全部 ${rows.length} 个检测页面均未输出 noindex，页面可正常被搜索引擎收录`
+            : overall === 'verify'
+              ? 'No-Index 检测结果待人工验收'
+              : '页面加载失败，未执行 No-Index 检查'
+      const keep = rows.find((row) => str(row.status) === overall) ?? rows[0]
+      const site = siteUrl.get(taskId) as SqlRow | undefined
+      update.run(
+        str(site?.url ?? keep.pageUrl),
+        overall,
+        actual,
+        '未输出 noindex（允许搜索引擎收录）',
+        description,
+        num(keep.id)
+      )
+      for (const row of rows) {
+        if (num(row.id) !== num(keep.id)) remove.run(num(row.id))
+      }
+
+      const counts = countResults(
+        (remainingResults.all(taskId) as SqlRow[]).map((row) => ({
+          status: str(row.status) as CheckStatus,
+          kind: str(row.kind) as RuleKind,
+          ruleKey: str(row.ruleKey)
+        }))
+      )
+      updateCounts.run(counts.passCount, counts.warnCount, counts.failCount, counts.skipCount, counts.verifyCount, taskId)
+    }
+    sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}
+
+
+/** 新增首页站点 Title / Favicon 检测规则 */
+function migrateAddSiteTitleFaviconRule(sqlite: DatabaseSync): void {
+  const marker = 'migration.siteTitleFaviconRule.v1'
+  const done = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(marker) as SqlRow | undefined
+  if (done) return
+
+  const def = BUILTIN_RULE_SETS.find((item) => item.name === '网站交付检查')
+  const seed = def?.rules.find((rule) => rule.ruleKey === 'seo.site.title-favicon')
+  const rs = sqlite
+    .prepare('SELECT id FROM rule_sets WHERE name = ? AND isBuiltin = 1')
+    .get('网站交付检查') as { id: number } | undefined
+
+  sqlite.exec('BEGIN')
+  try {
+    if (rs && seed) {
+      const exists = sqlite
+        .prepare('SELECT 1 AS found FROM rules WHERE ruleSetId = ? AND ruleKey = ?')
+        .get(rs.id, seed.ruleKey) as SqlRow | undefined
+      if (!exists) {
+        const nextSort = sqlite
+          .prepare('SELECT COALESCE(MAX(sortOrder), -1) + 1 AS n FROM rules WHERE ruleSetId = ?')
+          .get(rs.id) as SqlRow
+        sqlite
+          .prepare(
+            `INSERT INTO rules (ruleSetId, groupName, ruleKey, name, enabled, description, deliverable, scope, kind, params, sortOrder)
+             VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            rs.id,
+            seed.groupName,
+            seed.ruleKey,
+            seed.name,
+            seed.description ?? null,
+            seed.deliverable ?? DELIVERABLE_PRESETS[seed.ruleKey] ?? '',
+            seed.scope ?? 'page',
+            seed.kind ?? 'check',
+            JSON.stringify(seed.params ?? {}),
+            num(nextSort.n)
+          )
+      }
+      if (def) {
+        const oldDescription =
+          '网站交付前的质量检查：验证 H1 标题存在且唯一、页面未输出 No-Index，扫描 Elementor 板块是否残留同时隐藏于桌面与移动端的元素；H1 与隐藏板块按 wp-sitemap.xml 的页面/新闻/产品链接逐页检查，其他页面级规则按模板去重取代表页。'
+        sqlite
+          .prepare('UPDATE rule_sets SET description = ?, updatedAt = ? WHERE id = ? AND description = ?')
+          .run(def.description, new Date().toISOString(), rs.id, oldDescription)
+      }
+    }
     sqlite.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").run(marker)
     sqlite.exec('COMMIT')
   } catch (err) {

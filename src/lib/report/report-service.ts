@@ -10,6 +10,9 @@ import { displayUrl, pageLabel } from '../display'
 import type { CheckResult, ReportSettings, Site, RuleSet, Task, SiteDataByRuleKey } from '../types'
 import { resultKind } from '../rule-kinds'
 
+/** 站点级汇总规则：失败时在问题清单中按一条结果展示 */
+const SITE_SUMMARY_RULE_KEYS = new Set(['seo.noindex.disabled', 'seo.site.title-favicon'])
+
 /** 报告数据（含截图 dataURL） */
 export interface ReportData {
   task: Task
@@ -247,7 +250,7 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
 
   // 检测明细包含机器检测与合同文案；功能产物不进入明细表
   const reportResults = results.filter((r) => resultKind(r) !== 'artifact')
-  const isDeliveryReport = reportResults.some((r) => r.ruleKey.startsWith('delivery.'))
+  const isDeliveryReport = reportResults.some((r) => r.ruleKey.startsWith('delivery.') || SITE_SUMMARY_RULE_KEYS.has(r.ruleKey))
 
   type DetailRow = {
     ruleKey: string
@@ -339,8 +342,12 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
       })
     }
     for (const r of reportResults) {
-      if (!r.ruleKey.startsWith('delivery.')) continue
-      if (r.ruleKey === 'delivery.h1.count' || r.ruleKey === 'delivery.elementor.hidden-both') continue
+      const isAggregatedSiteRule =
+        r.ruleKey === 'delivery.h1.count' ||
+        r.ruleKey === 'delivery.elementor.hidden-both' ||
+        SITE_SUMMARY_RULE_KEYS.has(r.ruleKey)
+      if (!r.ruleKey.startsWith('delivery.') && !SITE_SUMMARY_RULE_KEYS.has(r.ruleKey)) continue
+      if (isAggregatedSiteRule) continue
       if (r.status !== 'fail' && r.status !== 'warn') continue
       issueRows.push({ type: r.ruleName, page: r.pageUrl, problem: r.actualValue || '检测异常', detail: r.description })
     }
@@ -357,6 +364,12 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
         issueRows.push({ type: r.ruleName, page: r.pageUrl, problem: r.actualValue || '检测异常', detail: r.description })
       }
     }
+    SITE_SUMMARY_RULE_KEYS.forEach((key) => {
+      const r = reportResults.find((item) => item.ruleKey === key)
+      if (r && (r.status === 'fail' || r.status === 'warn')) {
+        issueRows.push({ type: r.ruleName, page: r.pageUrl, problem: r.actualValue || '检测异常', detail: r.description })
+      }
+    })
   }
   const issueSection = !isDeliveryReport
     ? ''
