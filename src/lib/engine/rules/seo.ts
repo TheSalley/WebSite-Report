@@ -31,6 +31,15 @@ function faviconHref(links: Record<string, string>): string {
   return ''
 }
 
+/** 将 favicon 相对链接解析为绝对 URL（报告内嵌图片使用） */
+function absoluteIconUrl(href: string, baseUrl: string): string {
+  try {
+    return new URL(href, baseUrl).toString()
+  } catch {
+    return href
+  }
+}
+
 /** 将 favicon 相对链接解析为展示用 URL */
 function faviconLabel(href: string, baseUrl: string): string {
   try {
@@ -96,13 +105,16 @@ export const seoRules: Record<string, RuleHandler> = {
     const iconUrl = icon ? faviconLabel(icon, home.finalUrl) : ''
     const iconText = iconUrl ? `Favicon：${iconUrl.slice(0, 120)}${iconUrl.length > 120 ? '…' : ''}` : 'Favicon 未设置'
     const actual = `${titleText}；${iconText}`
+    // 报告展示用：完整 Title 与 Favicon 绝对地址（actual 里为紧凑截断文本）
+    const data = { title, faviconUrl: icon ? absoluteIconUrl(icon, home.finalUrl) : '' }
 
     if (title && icon) {
       return {
         status: 'pass',
         actual,
         expected: '首页设置非空站点 Title 和 Favicon',
-        description: '首页站点 Title 与 Favicon 均已配置'
+        description: '首页站点 Title 与 Favicon 均已配置',
+        data
       }
     }
 
@@ -117,7 +129,8 @@ export const seoRules: Record<string, RuleHandler> = {
       status: 'fail',
       actual,
       expected: '首页设置非空站点 Title 和 Favicon',
-      description
+      description,
+      data
     }
   },
 

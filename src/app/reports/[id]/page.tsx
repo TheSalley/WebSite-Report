@@ -15,7 +15,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="no-print mb-4 flex items-center justify-between">
         <h1 className="text-lg font-bold">报告 # {id}</h1>
         {!error && (
         <div className="flex gap-2">
@@ -34,7 +34,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           报告生成失败：{error}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className="report-print-area overflow-hidden rounded-xl border border-border bg-white shadow-sm" dangerouslySetInnerHTML={{ __html: html }} />
       )}
     </div>
   )

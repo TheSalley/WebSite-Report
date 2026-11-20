@@ -109,6 +109,8 @@ export interface SiteDataByRuleKey {
   'delivery.h1.count'?: { pages: { url: string; h1s: string[] }[] }
   'delivery.elementor.hidden-both'?: { pages: { url: string; items: ElementorHiddenItem[] }[] }
   'delivery.sitemap'?: unknown
+  /** 首页站点 Title 与 Favicon 原始值（报告展示具体值与图标） */
+  'seo.site.title-favicon'?: { title?: string; faviconUrl?: string }
   [ruleKey: string]: unknown
 }
 

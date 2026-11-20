@@ -79,6 +79,92 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;')
 }
 
+/** 长值按顿号分组折行，避免一长串页面路径把单元格撑得很宽 */
+function wrapListValue(value: string, maxLen = 44): string[] {
+  if (value.length <= maxLen || !value.includes('、')) return [value]
+  const out: string[] = []
+  let line = ''
+  for (const item of value.split('、')) {
+    const next = line ? `${line}、${item}` : item
+    if (line && next.length > maxLen) {
+      out.push(`${line}、`)
+      line = item
+    } else {
+      line = next
+    }
+  }
+  if (line) out.push(line)
+  return out
+}
+
+/**
+ * 交付检查「内容说明」排版：按中文分句拆行，标签与长链接（URL/路径）分行，
+ * 避免整段说明挤成一长行、长 URL 无法换行把表格撑开。
+ */
+function formatDeliveryDescription(raw: string | null | undefined): string[] {
+  const text = (raw ?? '').trim()
+  if (!text) return []
+  const lines: string[] = []
+  for (const clause of text.split(/(?<=[；;。])/)) {
+    const piece = clause.replace(/[；;。]$/, '').trim()
+    if (!piece) continue
+    const m = piece.match(/^([^：:]{1,24})[：:](.+)$/)
+    const value = m?.[2]?.trim() ?? ''
+    if (m && (value.length > 12 || /^(https?:|\/|www\.)/i.test(value))) {
+      lines.push(`${m[1]}：`)
+      lines.push(...wrapListValue(value))
+    } else {
+      lines.push(...wrapListValue(piece))
+    }
+  }
+  return lines
+}
+
+/** 从旧任务 actualValue 解析 Title / Favicon（形如 Title：“…”；Favicon：https://…） */
+function parseSiteMetaText(actual: string | null | undefined): { title: string; faviconUrl: string } {
+  const text = (actual ?? '').trim()
+  if (!text) return { title: '', faviconUrl: '' }
+  const title = text.match(/Title[：:]\s*(?:[“"]([\s\S]*?)[”"])/)?.[1]?.trim() ?? ''
+  // 旧数据里的 Favicon 地址可能被截断（结尾 …），截断值不作为图片地址
+  const faviconRaw = text.match(/Favicon[：:]\s*(https?:\/\/[^\s；;]+)/)?.[1]?.trim() ?? ''
+  const favicon = faviconRaw.endsWith('…') ? '' : faviconRaw
+  return { title, faviconUrl: favicon }
+}
+
+interface SiteMetaDisplay {
+  title: string
+  faviconUrl: string
+  faviconDataUrl: string | null
+}
+
+/** 站点 Title / Favicon 说明单元格：展示具体标题、favicon 图标与完整地址 */
+function siteMetaCellHtml(meta: SiteMetaDisplay): string {
+  const empty = '<span class="meta-empty">未配置</span>'
+  const titleHtml = meta.title ? `<span class="meta-value">${escapeHtml(meta.title)}</span>` : empty
+  const iconSrc = meta.faviconDataUrl ?? meta.faviconUrl
+  const iconHtml = iconSrc
+    ? `<span class="meta-favicon"><img src="${escapeHtml(iconSrc)}" alt="站点 Favicon" /></span>`
+    : ''
+  const urlHtml = meta.faviconUrl ? `<span class="meta-link">${escapeHtml(meta.faviconUrl)}</span>` : empty
+  const faviconHtml = iconSrc ? `<span class="meta-favicon-row">${iconHtml}${urlHtml}</span>` : urlHtml
+  return `<div class="site-meta">
+      <div class="site-meta-line"><span class="meta-label">站点 Title：</span>${titleHtml}</div>
+      <div class="site-meta-line"><span class="meta-label">站点 Favicon：</span>${faviconHtml}</div>
+    </div>`
+}
+
+/** 交付检查「内容说明」单元格 HTML（已转义，行间用 <br>） */
+function deliveryDescriptionHtml(raw: string | null | undefined): string {
+  return formatDeliveryDescription(raw).map((line) => safeReportText(line)).join('<br>')
+}
+
+/** 交付检查「交付成果」：只区分有异常 / 无异常 */
+function deliveryStatusBadge(status: string): string {
+  return status === 'pass'
+    ? '<span class="badge badge-pass">无异常</span>'
+    : '<span class="badge badge-fail">有异常</span>'
+}
+
 /** 常见状态 emoji → 内联 SVG（服务器缺 emoji 字体时 PDF/打印也能正确显示） */
 const EMOJI_SVG: ReadonlyArray<readonly [string, string]> = [
   ['✅', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align:-2px;display:inline-block" role="img" aria-label="通过"><circle cx="12" cy="12" r="10" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/><path d="m8 12.4 2.6 2.6L16.2 9.6" fill="none" stroke="#16a34a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'],
@@ -104,6 +190,38 @@ function safeReportText(raw: string | null | undefined): string {
     out = out.split(emoji).join(svg)
   }
   return out.replace(/\n/g, '<br>')
+}
+
+/** 远程图标 → data URL（用于 PDF 内嵌；失败返回 null，调用方退回原始 URL） */
+const ICON_DATA_URL_CACHE = new Map<string, string | null>()
+
+async function readRemoteImageAsDataUrl(url: string, maxBytes = 2 * 1024 * 1024): Promise<string | null> {
+  if (!url) return null
+  if (url.startsWith('data:image/')) return url
+  if (!/^https?:\/\//i.test(url)) return null
+  if (ICON_DATA_URL_CACHE.has(url)) return ICON_DATA_URL_CACHE.get(url) ?? null
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+  try {
+    const res = await fetch(url, { signal: controller.signal, redirect: 'follow' })
+    if (!res.ok) return null
+    const type = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+    if (!type.startsWith('image/')) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length === 0 || buf.length > maxBytes) {
+      ICON_DATA_URL_CACHE.set(url, null)
+      return null
+    }
+    const dataUrl = `data:${type};base64,${buf.toString('base64')}`
+    if (ICON_DATA_URL_CACHE.size >= 20) ICON_DATA_URL_CACHE.clear()
+    ICON_DATA_URL_CACHE.set(url, dataUrl)
+    return dataUrl
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** 读取截图文件并转为 data URL */
@@ -222,6 +340,7 @@ export async function buildReportPdf(taskId: number): Promise<Buffer> {
 </html>`
   const browser = await getBrowser()
   const page = await browser.newPage()
+  const headerTitle = escapeHtml(data.settings.reportTitle || '网站检测报告')
   try {
     await page.setContent(html, { waitUntil: 'networkidle' })
     await page.emulateMedia({ media: 'print' })
@@ -229,7 +348,7 @@ export async function buildReportPdf(taskId: number): Promise<Buffer> {
       format: 'A4',
       printBackground: true,
       displayHeaderFooter: true,
-      headerTemplate: '<div style="font-size:9px;color:#888;width:100%;text-align:center;padding:0 10mm 2mm 10mm;">' + data.settings.reportTitle + '</div>',
+      headerTemplate: '<div style="font-size:9px;color:#888;width:100%;text-align:center;padding:0 10mm 2mm 10mm;">' + headerTitle + '</div>',
       footerTemplate: '<div style="font-size:9px;color:#888;width:100%;text-align:center;padding:2mm 10mm 0 10mm;"><span class="pageNumber"></span> / <span class="totalPages"></span></div>',
       margin: { top: '14mm', bottom: '16mm', left: '10mm', right: '10mm' }
     })
@@ -248,6 +367,14 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   const sectionTitle = (title: string) => { const no = sectionNo++; return `<h2 class="section-title">${CN[no - 1] ?? no}、${title}</h2>` }
   const logoDataUrl = settings.logoPath ? await resolveLogoDataUrl(settings.logoPath) : null
 
+  // 站点 Title / Favicon 具体值（旧任务无结构化数据时从 actualValue 回退解析）
+  const siteMeta = (data.siteData?.['seo.site.title-favicon'] ?? null) as { title?: string; faviconUrl?: string } | null
+  const siteMetaRow = results.find((r) => r.ruleKey === 'seo.site.title-favicon')
+  const parsedMeta = siteMetaRow ? parseSiteMetaText(siteMetaRow.actualValue) : { title: '', faviconUrl: '' }
+  const siteTitleValue = (siteMeta?.title ?? '').trim() || parsedMeta.title
+  const siteFaviconUrl = (siteMeta?.faviconUrl ?? '').trim() || parsedMeta.faviconUrl
+  const siteFaviconDataUrl = siteFaviconUrl ? await readRemoteImageAsDataUrl(siteFaviconUrl) : null
+
   // 检测明细包含机器检测与合同文案；功能产物不进入明细表
   const reportResults = results.filter((r) => resultKind(r) !== 'artifact')
   const isDeliveryReport = reportResults.some((r) => r.ruleKey.startsWith('delivery.') || SITE_SUMMARY_RULE_KEYS.has(r.ruleKey))
@@ -257,6 +384,8 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     ruleName: string
     description: string
     deliverable: string
+    status: string
+    actual: string
     note: string | null
   }
 
@@ -271,6 +400,8 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
         ruleName: r.ruleName,
         description: r.description ?? '',
         deliverable: r.deliverable ?? '',
+        status: r.status,
+        actual: r.actualValue ?? '',
         note: r.note ?? null
       })
       groups.set(r.groupName, arr)
@@ -287,6 +418,8 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
         ruleName: item.name,
         description: item.description,
         deliverable: item.deliverable,
+        status: '',
+        actual: '',
         note: null
       })
       groups.set(item.groupName, arr)
@@ -294,24 +427,40 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
     orderedGroups = Array.from(groups.entries())
   }
 
-  // ── 主检测明细表（合同式：板块列 rowspan 合并）──
+  // ── 主检测明细表（合同式：板块列逐行同底色，避免跨页丢边框）──
   const mainRows = orderedGroups
     .map(([groupName, groupResults]) =>
       groupResults
         .map((r, idx) => {
+          // 板块列不做 rowspan：合并单元格跨页时边框/底色会丢失，改为每行一个同底色单元格
           const firstCell =
             idx === 0
-              ? `<td rowspan="${groupResults.length}" class="group-cell">${escapeHtml(groupName)}<span class="group-count">${groupResults.length} 项</span></td>`
-              : ''
+              ? `<td class="group-cell">${escapeHtml(groupName)}<span class="group-count">${groupResults.length} 项</span></td>`
+              : '<td class="group-cell group-cell-continued" aria-hidden="true"></td>'
           const noteHtml = r.note ? `<div class="note">备注：${safeReportText(r.note)}</div>` : ''
-          const descHtml = r.description ? safeReportText(r.description) : ''
-          return `<tr>
+          const descHtml =
+            isDeliveryReport && r.ruleKey === 'seo.site.title-favicon'
+              ? siteMetaCellHtml({
+                  title: siteTitleValue,
+                  faviconUrl: siteFaviconUrl,
+                  faviconDataUrl: siteFaviconDataUrl
+                })
+              : isDeliveryReport
+                ? deliveryDescriptionHtml(r.description)
+                : r.description
+                  ? safeReportText(r.description)
+                  : ''
+          const deliverCell = isDeliveryReport
+            ? deliveryStatusBadge(r.status)
+            : r.deliverable && r.deliverable.trim()
+              ? `<div class="cell-deliver"><span class="deliver-text">${safeReportText(r.deliverable)}</span></div>`
+              : ''
+          const rowClass = idx < groupResults.length - 1 ? ' class="group-link"' : ''
+          return `<tr${rowClass}>
             ${firstCell}
             <td class="item-cell"><div class="item-name">${escapeHtml(r.ruleName)}</div></td>
             <td class="desc-cell">${descHtml}${noteHtml}</td>
-            <td class="deliver-cell">
-              ${r.deliverable && r.deliverable.trim() ? `<div class="cell-deliver"><span class="deliver-text">${safeReportText(r.deliverable)}</span></div>` : ''}
-            </td>
+            <td class="deliver-cell">${deliverCell}</td>
           </tr>`
         })
         .join('')
@@ -412,14 +561,51 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
 
   return `<style>
   .report-root, .report-root * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* 强制保留背景色与边框（部分 PDF/打印环境默认会剥离背景） */
+  .report-root, .report-root * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .report-root { font-family: "Microsoft YaHei", "PingFang SC", "SimSun", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; color: #1f2430; background: #f6f8fb; padding: 32px 40px; line-height: 1.65; }
   @media print {
     .report-root { padding: 0; }
     @page { size: A4; }
-    .report-root .contract-table { break-inside: auto; }
-    .report-root .contract-table tr, .report-root .contract-table td { break-inside: auto; }
-    .report-root .header, .report-root .shot-item { break-inside: avoid; }
+    /*
+     * 跨页表格修复：
+     * 1) 去掉 overflow:hidden / border-radius / box-shadow，避免分页时裁掉外框与底色；
+     * 2) collapse 在分页边界会丢失单元格边框，改为 separate + 逐格描边；
+     * 3) 单元格用 box-decoration-break: clone，保证跨页片段仍绘制背景。
+     */
+    .report-root .contract-table {
+      border-collapse: separate;
+      border-spacing: 0;
+      border: 0;
+      border-top: 0.75pt solid #cfdaea;
+      border-left: 0.75pt solid #cfdaea;
+      border-radius: 0;
+      overflow: visible;
+      box-shadow: none;
+      break-inside: auto;
+    }
+    /* 只画右/下边线：相邻单元格不会叠出双线，分页后的续页片段仍保留网格 */
+    .report-root .contract-table th,
+    .report-root .contract-table td {
+      border: 0;
+      border-right: 0.75pt solid #cfdaea;
+      border-bottom: 0.75pt solid #cfdaea;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+      break-inside: auto;
+    }
+    .report-root .contract-table td.group-cell { border-right: 1pt solid #cbd6e6; }
+    /* 板块列在组内不画横线，跨页后仍是一整块灰色区域 */
+    .report-root .main-table tr.group-link td.group-cell { border-bottom: 0; }
+    .report-root .pageset-table-wrap,
+    .report-root .pageset-box,
+    .report-root .matrix-box,
+    .report-root .matrix-table { overflow: visible; }
+    .report-root .header, .report-root .shot-item, .report-root .issue-empty { break-inside: avoid; }
     .report-root thead { display: table-header-group; }
+    .report-root thead th { break-inside: avoid; break-after: avoid; }
+    .report-root h2.section-title { break-after: avoid; break-inside: avoid; }
+    .report-root .main-table td.group-cell { break-inside: auto; }
     .report-root { background: #fff; }
     .report-root .shot-grid { gap: 12pt; }
     .report-root .shot-item img { height: 200pt; object-fit: contain; background: #fff; }
@@ -447,8 +633,12 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .meta-table td.value { width: 41%; }
 
   /* 检测明细 */
-  .main-table tbody tr:nth-child(even) td { background: #fbfcfe; }
-  .main-table tbody tr:hover td { background: #f1f5ff; }
+  .main-table tbody tr:nth-child(even) td:not(.group-cell) { background: #fbfcfe; }
+  .main-table tbody tr:hover td:not(.group-cell) { background: #f1f5ff; }
+  .main-table td.group-cell { background: #f8fafc; }
+  /* 板块列在组内不画横线，视觉上仍是整块 */
+  .main-table tr.group-link td.group-cell { border-bottom-color: transparent; }
+  .main-table td.group-cell-continued { border-top-color: transparent; }
   .main-table td.item-name { font-weight: 600; color: #1e293b; }
   .main-table .sev { display: inline-block; margin-top: 2px; font-size: 11px; border: 1px solid; border-radius: 2px; padding: 0 4px; }
   .sev-critical { color: #b91c1c; border-color: #b91c1c; background: #fef2f2; }
@@ -468,6 +658,20 @@ export async function buildReportHtml(data: ReportData): Promise<string> {
   .badge-skip { color: #6b7280; border-color: #6b7280; background: #fafafa; }
   .badge-verify { color: #2563eb; border-color: #2563eb; background: #eff6ff; }
   .deliver-cell { text-align: center; vertical-align: middle; }
+  .deliver-cell .badge { padding: 2px 8px; font-size: 11px; letter-spacing: 0; }
+  /* 站点 Title / Favicon 具体值 */
+  .site-meta { display: flex; flex-direction: column; gap: 6px; }
+  .site-meta-line { display: flex; align-items: flex-start; gap: 4px; flex-wrap: wrap; }
+  .site-meta .meta-label { flex: none; font-weight: 600; color: #475569; }
+  .site-meta .meta-value { color: #1e293b; word-break: break-word; }
+  .site-meta .meta-empty { color: #b91c1c; }
+  .site-meta .meta-favicon-row { display: inline-flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
+  .site-meta .meta-favicon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 26px; height: 26px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; overflow: hidden; }
+  .site-meta .meta-favicon img { display: block; max-width: 20px; max-height: 20px; width: auto; height: auto; object-fit: contain; }
+  .site-meta .meta-link { color: #475569; font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+  /* 内容说明：分行展示，长链接整体换行 */
+  .main-table td.desc-cell { line-height: 1.7; }
+  .main-table td.desc-cell br + * { margin-top: 2px; }
   .deliver-cell .deliver-text { display: inline-block; text-align: left; font-size: 12px; line-height: 1.6; color: #334155; word-break: break-word; }
   .deliver-cell .cell-deliver { text-align: left; }
   .stale-box { border-color: #fde68a; background: #fffbeb; }

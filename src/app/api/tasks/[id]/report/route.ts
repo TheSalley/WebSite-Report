@@ -10,6 +10,11 @@ function formatFileNameDate(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+/** 报告文件名的报告类型后缀：交付检查与合同验收分别使用对应名称 */
+function reportFileKind(ruleSetName: string | null | undefined): string {
+  return (ruleSetName ?? '').includes('交付检查') ? '网站交付检查报告' : '网站上线验收报告'
+}
+
 /** 清洗站点名称中的非法文件名字符 */
 function sanitizeFilename(name: string): string {
   const clean = name.replace(/[\\/:*?"<>|]/g, '_').trim()
@@ -29,7 +34,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const pdf = await buildReportPdf(Number(id))
       const siteName = sanitizeFilename(data.site?.name ?? `任务${id}`)
       const date = formatFileNameDate(data.task?.startedAt)
-      const filename = `${siteName}-网站上线验收报告-${date}.pdf`
+      const filename = `${siteName}-${reportFileKind(data.ruleSet?.name)}-${date}.pdf`
       return new NextResponse(new Uint8Array(pdf), {
         headers: {
           'Content-Type': 'application/pdf',

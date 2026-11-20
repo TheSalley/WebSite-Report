@@ -254,3 +254,30 @@ body {
     animation: none;
   }
 }
+
+/* ── 打印/导出 PDF：只保留报告内容，避免屏幕布局干扰分页 ── */
+@media print {
+  .app-sidebar,
+  .app-topbar,
+  .app-bottomnav,
+  .no-print {
+    display: none !important;
+  }
+  .app-main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    min-height: 0 !important;
+  }
+  .app-main > div {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .report-print-area {
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+}

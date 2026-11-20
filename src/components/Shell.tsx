@@ -22,8 +22,8 @@ export default function Shell({ children, version }: { children: React.ReactNode
   }
 
   return (
-    <div className="flex min-h-screen text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-56 flex-col border-r border-border bg-panel md:flex">
+    <div className="app-shell flex min-h-screen text-foreground">
+      <aside className="app-sidebar fixed inset-y-0 left-0 z-20 hidden w-56 flex-col border-r border-border bg-panel md:flex">
         <div className="flex h-16 items-center px-5">
           <Link href="/" aria-label="返回概览">
             <img src="/logo.svg" alt="KUKA" className="h-8 w-auto object-contain" />
@@ -60,12 +60,12 @@ export default function Shell({ children, version }: { children: React.ReactNode
         </div>
       </aside>
 
-      <div className="fixed inset-x-0 top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-panel px-4 md:hidden">
+      <div className="app-topbar fixed inset-x-0 top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-panel px-4 md:hidden">
         <img src="/logo.svg" alt="KUKA" className="h-7 w-auto object-contain" />
         <ThemeToggle />
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-panel pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav className="app-bottomnav fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-panel pb-[env(safe-area-inset-bottom)] md:hidden">
         {navItems.map((item) => {
           const active = isActive(item.href)
           const Icon = item.icon
@@ -84,7 +84,7 @@ export default function Shell({ children, version }: { children: React.ReactNode
         })}
       </nav>
 
-      <main className="min-h-screen w-full md:pl-56">
+      <main className="app-main min-h-screen w-full md:pl-56">
         <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-20 md:px-8 md:py-10">{children}</div>
       </main>
     </div>
