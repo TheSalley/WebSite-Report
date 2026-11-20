@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "rulesets:export": "node --no-warnings scripts/export-rulesets.mjs",
+    "rulesets:import": "node --no-warnings scripts/import-rulesets.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.45.0",

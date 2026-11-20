@@ -49,6 +49,34 @@ node scripts/migrate-realsite-to-reports.mjs             # 正式写入
 
 迁移成功后旧文件不会自动删除，确认 `reports.db` 数据正常后可自行移除 `realsite.db` 及其 `-wal`/`-shm` 文件。
 
+### 导出 / 导入规则集
+
+把线上数据库的规则集导出成 JSON，再到另一台机器导入，不用手改数据库。
+
+```bash
+# 导出本地库（默认生成 rulesets-<时间>.json）
+npm run rulesets:export
+
+# 导出线上库
+npm run rulesets:export -- --from root@<服务器IP>
+
+# 只导出一个规则集
+npm run rulesets:export -- --set 网站交付检查
+
+# 导入到本地库（可先加 --dry-run 看差异）
+npm run rulesets:import -- rulesets-20261120-173001.json
+
+# 导入到线上（自动备份、上传并重启服务）
+npm run rulesets:import -- rules.json --to root@<服务器IP>:/srv/app/web-report-data/reports.db
+```
+
+导入按「规则集名称 + ruleKey」匹配：
+
+- 缺失的规则集和规则会新建，已有的会更新名称、说明、交付成果、执行范围、类型、排序与启停状态；
+- 保留规则原有 `id`，历史检测结果不受影响；
+- 导出文件里没有、但库里存在的额外规则默认保留，加 `--replace` 才删除；
+- 写库前自动备份（线上为同目录 `.bak-<时间>`）。
+
 ## 服务器部署
 
 ```bash
